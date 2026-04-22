@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #F5F5F5; }
+      .accent { fill: #00D4FF; }
+      .bars { fill: #1F2937; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1F2937; }
+      .accent { fill: #00D4FF; }
+      .bars { fill: #FFFFFF; }
+    }
+  </style>
+  <rect class="bg" width="180" height="180" rx="40"/>
+  <g transform="translate(45, 50)">
+    <!-- Activity chart bars -->
+    <rect class="bars" x="0" y="35" width="12" height="45" rx="2"/>
+    <rect class="bars" x="18" y="25" width="12" height="55" rx="2" opacity="0.7"/>
+    <rect class="bars" x="36" y="15" width="12" height="65" rx="2"/>
+    <circle class="accent" cx="6" cy="33" r="3"/>
+    <circle class="accent" cx="24" cy="23" r="3"/>
+    <circle class="accent" cx="42" cy="13" r="3"/>
+  </g>
+</svg>
