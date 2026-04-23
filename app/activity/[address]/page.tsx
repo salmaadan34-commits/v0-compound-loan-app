@@ -304,6 +304,118 @@ export default function ActivityPage() {
     }))
   }, [collateralLedger, collateralPeriod])
 
+  const borrowerRecon = useMemo(() => {
+    type JournalEntry = {
+      date: string
+      timestamp: string
+      description: string
+      debitAccount: string
+      creditAccount: string
+      usdAmount: number
+      asset: string
+    }
+    type MonthlyGroup = {
+      period: string
+      periodLabel: string
+      entries: JournalEntry[]
+      openingDebt: number
+      openingCollateral: number
+      closingDebt: number
+      closingCollateral: number
+      totalBorrowed: number
+      totalRepaid: number
+      totalInterest: number
+      totalLiquidated: number
+      liquidationRisk: "low" | "medium" | "high" | "liquidated"
+    }
+
+    const sortedEvents = [...events].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    )
+
+    const journalEntries: JournalEntry[] = []
+
+    sortedEvents.forEach((e) => {
+      const amtUsd = parseFloat(e.amountUsd)
+      const date = new Date(e.timestamp).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
+
+      if (e.accountType === "debt") {
+        if (e.activity === "borrowing") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Borrowed ${e.asset}`, debitAccount: `Crypto (${e.asset})`, creditAccount: "Crypto Borrowings", usdAmount: amtUsd, asset: e.asset })
+        } else if (e.activity === "repayment") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Repaid ${e.asset}`, debitAccount: "Crypto Borrowings", creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+        } else if (e.activity === "interest") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Interest on ${e.asset}`, debitAccount: "Interest Expense", creditAccount: "Crypto Borrowings – Interest Payable", usdAmount: amtUsd, asset: e.asset })
+        } else if (e.activity === "liquidation") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Debt liquidated (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+        }
+      } else if (e.accountType === "collateral") {
+        if (e.activity === "deposit") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Deposited ${e.asset} collateral`, debitAccount: `Collateral Crypto (${e.asset})`, creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+        } else if (e.activity === "redemption") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Withdrew ${e.asset} collateral`, debitAccount: `Crypto (${e.asset})`, creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+        } else if (e.activity === "liquidation") {
+          journalEntries.push({ date, timestamp: e.timestamp, description: `Collateral seized (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+        }
+      }
+    })
+
+    // Group by month
+    const groups = new Map<string, JournalEntry[]>()
+    journalEntries.forEach((entry) => {
+      const d = new Date(entry.timestamp)
+      const key = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(entry)
+    })
+
+    let periodDebt = 0
+    let periodCollateral = 0
+
+    const monthlyGroups: MonthlyGroup[] = Array.from(groups.entries()).map(([key, entries]) => {
+      const [y, m] = key.split("/")
+      const monthName = new Date(Number(y), Number(m) - 1).toLocaleString("en-US", { month: "long" })
+      const openingDebt = periodDebt
+      const openingCollateral = periodCollateral
+      let totalBorrowed = 0, totalRepaid = 0, totalInterest = 0, totalLiquidated = 0
+      let collateralIn = 0, collateralOut = 0
+
+      entries.forEach((entry) => {
+        if (entry.creditAccount === "Crypto Borrowings") totalBorrowed += entry.usdAmount
+        if (entry.debitAccount === "Crypto Borrowings" && !entry.description.includes("liquidated")) totalRepaid += entry.usdAmount
+        if (entry.debitAccount === "Interest Expense") totalInterest += entry.usdAmount
+        if (entry.description.includes("liquidated") || entry.description.includes("seized")) totalLiquidated += entry.usdAmount
+        if (entry.debitAccount.startsWith("Collateral Crypto")) collateralIn += entry.usdAmount
+        if (entry.creditAccount.startsWith("Collateral Crypto")) collateralOut += entry.usdAmount
+      })
+
+      periodDebt = openingDebt + totalBorrowed + totalInterest - totalRepaid - totalLiquidated
+      periodCollateral = openingCollateral + collateralIn - collateralOut
+
+      const ltv = periodCollateral > 0 ? periodDebt / periodCollateral : 0
+      const liquidationRisk: MonthlyGroup["liquidationRisk"] =
+        totalLiquidated > 0 ? "liquidated" : ltv > 0.75 ? "high" : ltv > 0.5 ? "medium" : "low"
+
+      return {
+        period: key,
+        periodLabel: `${monthName} ${y}`,
+        entries,
+        openingDebt,
+        openingCollateral,
+        closingDebt: periodDebt,
+        closingCollateral: periodCollateral,
+        totalBorrowed,
+        totalRepaid,
+        totalInterest,
+        totalLiquidated,
+        liquidationRisk,
+      }
+    })
+
+    const ltv = periodCollateral > 0 ? periodDebt / periodCollateral : 0
+    return { monthlyGroups, currentDebt: periodDebt, currentCollateral: periodCollateral, currentLtv: ltv }
+  }, [events])
+
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
 
   const formatDate = (timestamp: string) => {
@@ -375,11 +487,12 @@ export default function ActivityPage() {
           </div>
         ) : (
           <Tabs defaultValue="summary" className="w-full">
-            <TabsList className="grid w-full max-w-lg grid-cols-4 mb-6">
+            <TabsList className="grid w-full max-w-2xl grid-cols-5 mb-6">
               <TabsTrigger value="summary">Summary</TabsTrigger>
               <TabsTrigger value="loan">Loan</TabsTrigger>
               <TabsTrigger value="collateral">Collateral</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="borrower">Borrower</TabsTrigger>
             </TabsList>
 
             {/* Summary Tab */}
@@ -703,6 +816,143 @@ export default function ActivityPage() {
                 </div>
               </CardContent>
             </Card>
+            </TabsContent>
+
+            {/* Borrower Reconciliation Tab */}
+            <TabsContent value="borrower" className="space-y-6">
+              {/* Current Position Summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-4 pb-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Owed</p>
+                    <p className="text-lg font-bold font-mono">
+                      ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Crypto Borrowings</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 pb-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Collateral</p>
+                    <p className="text-lg font-bold font-mono">
+                      ${borrowerRecon.currentCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Collateral Crypto</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 pb-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">LTV Ratio</p>
+                    <p className={`text-lg font-bold font-mono ${borrowerRecon.currentLtv > 0.75 ? "text-red-600" : borrowerRecon.currentLtv > 0.5 ? "text-amber-600" : "text-green-600"}`}>
+                      {(borrowerRecon.currentLtv * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">Debt / Collateral</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 pb-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Liquidation Risk</p>
+                    <p className={`text-lg font-bold ${
+                      borrowerRecon.currentLtv > 0.75 ? "text-red-600" :
+                      borrowerRecon.currentLtv > 0.5 ? "text-amber-600" : "text-green-600"
+                    }`}>
+                      {borrowerRecon.currentLtv > 0.75 ? "HIGH" : borrowerRecon.currentLtv > 0.5 ? "MEDIUM" : "LOW"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Based on LTV</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Monthly Reconciliation */}
+              {borrowerRecon.monthlyGroups.length === 0 ? (
+                <p className="text-center py-12 text-muted-foreground">No borrower activity found</p>
+              ) : (
+                borrowerRecon.monthlyGroups.map((group) => (
+                  <Card key={group.period}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">{group.periodLabel}</CardTitle>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          group.liquidationRisk === "liquidated" ? "bg-red-100 text-red-700" :
+                          group.liquidationRisk === "high" ? "bg-red-100 text-red-700" :
+                          group.liquidationRisk === "medium" ? "bg-amber-100 text-amber-700" :
+                          "bg-green-100 text-green-700"
+                        }`}>
+                          {group.liquidationRisk === "liquidated" ? "LIQUIDATED" :
+                           group.liquidationRisk === "high" ? "HIGH RISK" :
+                           group.liquidationRisk === "medium" ? "MEDIUM RISK" : "LOW RISK"}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-b-2">
+                            <TableHead className="font-bold">Date</TableHead>
+                            <TableHead className="font-bold">Description</TableHead>
+                            <TableHead className="font-bold">Debit Account</TableHead>
+                            <TableHead className="font-bold">Credit Account</TableHead>
+                            <TableHead className="text-right font-bold">DR (USD)</TableHead>
+                            <TableHead className="text-right font-bold">CR (USD)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {/* Opening balance row */}
+                          <TableRow className="bg-muted/40 text-sm text-muted-foreground">
+                            <TableCell colSpan={4} className="pl-4 italic">Opening Balance</TableCell>
+                            <TableCell className="text-right font-mono">{group.openingDebt > 0 ? `$${group.openingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{group.openingCollateral > 0 ? `$${group.openingCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</TableCell>
+                          </TableRow>
+
+                          {/* Journal entries */}
+                          {group.entries.map((entry, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-sm">{entry.date}</TableCell>
+                              <TableCell className="text-sm">{entry.description}</TableCell>
+                              <TableCell className="text-sm text-blue-700">{entry.debitAccount}</TableCell>
+                              <TableCell className="text-sm text-amber-700 pl-6">{entry.creditAccount}</TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                ${entry.usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                ${entry.usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+
+                          {/* Embedded derivative row */}
+                          <TableRow className="text-muted-foreground text-xs italic">
+                            <TableCell colSpan={4} className="pl-4">Embedded Derivative – Fair Value Adjustment (price oracle required)</TableCell>
+                            <TableCell className="text-right">—</TableCell>
+                            <TableCell className="text-right">—</TableCell>
+                          </TableRow>
+
+                          {/* Closing balance row */}
+                          <TableRow className="border-t-2 bg-muted/40 font-semibold">
+                            <TableCell colSpan={4} className="pl-4">Closing Balance</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {group.closingDebt > 0 ? `$${group.closingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {group.closingCollateral > 0 ? `$${group.closingCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Period summary */}
+                          <TableRow className="bg-muted/20 text-xs text-muted-foreground">
+                            <TableCell colSpan={6} className="pl-4 py-2">
+                              <span className="mr-4">Borrowed: <span className="font-mono font-medium text-foreground">${group.totalBorrowed.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Repaid: <span className="font-mono font-medium text-foreground">${group.totalRepaid.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Interest: <span className="font-mono font-medium text-foreground">${group.totalInterest.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              {group.totalLiquidated > 0 && <span className="text-red-600">Liquidated: <span className="font-mono font-medium">${group.totalLiquidated.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </TabsContent>
           </Tabs>
         )}
