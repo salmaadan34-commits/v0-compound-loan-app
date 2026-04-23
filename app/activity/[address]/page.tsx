@@ -522,11 +522,20 @@ export default function ActivityPage() {
     })
   }
 
+  const ACTIVITY_LABELS: Record<string, string> = {
+    deposited: "Deposited",
+    redeemed: "Redeemed",
+    seized: "Seized",
+    "interest income": "Interest Income",
+    Borrow: "Borrow",
+    RepayBorrow: "Repay Borrow",
+    "interest expense": "Interest Expense",
+  }
+
   const formatUsd = (value: number, negative = false) => {
     if (value === 0) return ""
-    // Format with 1-2 decimals, remove trailing zeros, then remove trailing period if needed
-    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 }).replace(/0+$/, "").replace(/\.$/, "")
-    return negative ? `(${formatted})` : formatted
+    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    return negative ? `($${formatted})` : `$${formatted}`
   }
 
   const formatLedgerValue = (value: number, isDebit = false) => {
@@ -539,25 +548,34 @@ export default function ActivityPage() {
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-4 mb-8 p-4 rounded-xl border bg-muted/30">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">Compound Protocol</h1>
-            <p className="text-sm text-muted-foreground font-mono">
-              {formatAddress(address)}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold">Compound Protocol</h1>
+              {source && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  source === "kryptos" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                }`}>
+                  {source === "kryptos" ? "Live Data" : "Mock Data"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 mt-0.5">
+              <p className="text-sm text-muted-foreground font-mono truncate">{address}</p>
               <a
                 href={`https://etherscan.io/address/${address}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center ml-2 text-primary hover:underline"
+                className="inline-flex items-center text-primary hover:underline flex-shrink-0"
               >
                 <ExternalLink className="h-3 w-3" />
               </a>
-            </p>
+            </div>
           </div>
           <Button variant="outline" size="sm" onClick={fetchActivity} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -595,27 +613,29 @@ export default function ActivityPage() {
             <TabsContent value="summary" className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Collateral Summary */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-center text-lg border-b pb-2">COLLATERAL</CardTitle>
+                <Card className="overflow-hidden">
+                  <CardHeader className="pb-3 bg-green-50 border-b">
+                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-green-800">COLLATERAL</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-b-2">
-                          <TableHead className="font-bold">ACTIVITY</TableHead>
+                        <TableRow className="border-b-2 bg-muted/30">
+                          <TableHead className="font-semibold text-xs uppercase">Activity</TableHead>
                           {collateralTokens.map((token) => (
-                            <TableHead key={token} className="text-right font-bold">{token}</TableHead>
+                            <TableHead key={token} className="text-right font-semibold text-xs uppercase">{token}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {Object.entries(collateralSummary).map(([activity, tokens]) => (
+                        {Object.entries(collateralSummary)
+                          .filter(([, tokens]) => collateralTokens.some((t) => (tokens[t] || 0) !== 0))
+                          .map(([activity, tokens]) => (
                           <TableRow key={activity}>
-                            <TableCell className="font-medium">{activity}</TableCell>
+                            <TableCell className="font-medium text-sm">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
                             {collateralTokens.map((token) => (
-                              <TableCell key={token} className="text-right font-mono">
-                                {formatUsd(tokens[token] || 0, activity === "deposited")}
+                              <TableCell key={token} className="text-right font-mono text-sm">
+                                {formatUsd(tokens[token] || 0)}
                               </TableCell>
                             ))}
                           </TableRow>
@@ -626,26 +646,28 @@ export default function ActivityPage() {
                 </Card>
 
                 {/* Debt Summary */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-center text-lg border-b pb-2">DEBT</CardTitle>
+                <Card className="overflow-hidden">
+                  <CardHeader className="pb-3 bg-red-50 border-b">
+                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-red-800">DEBT</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-b-2">
-                          <TableHead className="font-bold">ACTIVITY</TableHead>
+                        <TableRow className="border-b-2 bg-muted/30">
+                          <TableHead className="font-semibold text-xs uppercase">Activity</TableHead>
                           {debtTokens.map((token) => (
-                            <TableHead key={token} className="text-right font-bold">{token}</TableHead>
+                            <TableHead key={token} className="text-right font-semibold text-xs uppercase">{token}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {Object.entries(debtSummary).map(([activity, tokens]) => (
+                        {Object.entries(debtSummary)
+                          .filter(([, tokens]) => debtTokens.some((t) => (tokens[t] || 0) !== 0))
+                          .map(([activity, tokens]) => (
                           <TableRow key={activity}>
-                            <TableCell className="font-medium">{activity}</TableCell>
+                            <TableCell className="font-medium text-sm">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
                             {debtTokens.map((token) => (
-                              <TableCell key={token} className="text-right font-mono">
+                              <TableCell key={token} className="text-right font-mono text-sm">
                                 {formatUsd(tokens[token] || 0, activity === "Borrow")}
                               </TableCell>
                             ))}
