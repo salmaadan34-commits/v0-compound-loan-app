@@ -312,15 +312,15 @@ export default function ActivityPage() {
 
   const formatUsd = (value: number, negative = false) => {
     if (value === 0) return "-"
-    // Format with up to 2 decimal places, removing trailing zeros
-    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).replace(/\.?0+$/, "")
+    // Format with up to 2 decimal places, showing at least one decimal place
+    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 }).replace(/0+$/, "")
     return negative ? `(${formatted})` : formatted
   }
 
   const formatLedgerValue = (value: number, isDebit = false) => {
     if (value === 0) return "-"
-    // Format with up to 2 decimal places, removing trailing zeros
-    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).replace(/\.?0+$/, "")
+    // Format with up to 2 decimal places, showing at least one decimal place
+    const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 }).replace(/0+$/, "")
     return isDebit ? `(${formatted})` : formatted
   }
 
