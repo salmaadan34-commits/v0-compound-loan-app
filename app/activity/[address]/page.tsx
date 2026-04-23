@@ -313,6 +313,7 @@ export default function ActivityPage() {
       creditAccount: string
       usdAmount: number
       asset: string
+      computed?: boolean
     }
     type MonthlyGroup = {
       period: string
@@ -326,94 +327,189 @@ export default function ActivityPage() {
       totalRepaid: number
       totalInterest: number
       totalLiquidated: number
+      embeddedDerivative: number
       liquidationRisk: "low" | "medium" | "high" | "liquidated"
     }
+
+    const BORROW_RATES: Record<string, number> = {
+      WETH: 0.03, WBTC: 0.02, USDC: 0.05, USDT: 0.04, COMP: 0.04,
+    }
+    const DEFAULT_RATE = 0.03
 
     const sortedEvents = [...events].sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     )
 
-    const journalEntries: JournalEntry[] = []
+    if (sortedEvents.length === 0) {
+      return { monthlyGroups: [], currentDebt: 0, currentCollateral: 0, currentLtv: 0 }
+    }
 
+    // Build month range
+    const firstDate = new Date(sortedEvents[0].timestamp)
+    const lastDate = new Date(sortedEvents[sortedEvents.length - 1].timestamp)
+    const allMonths: string[] = []
+    let cur = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1)
+    const endMonth = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1)
+    while (cur <= endMonth) {
+      allMonths.push(`${cur.getFullYear()}/${String(cur.getMonth() + 1).padStart(2, "0")}`)
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+    }
+
+    // Index events by month
+    const eventsByMonth = new Map<string, typeof sortedEvents>()
     sortedEvents.forEach((e) => {
-      const amtUsd = parseFloat(e.amountUsd)
-      const date = new Date(e.timestamp).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
-
-      if (e.accountType === "debt") {
-        if (e.activity === "borrowing") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Borrowed ${e.asset}`, debitAccount: `Crypto (${e.asset})`, creditAccount: "Crypto Borrowings", usdAmount: amtUsd, asset: e.asset })
-        } else if (e.activity === "repayment") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Repaid ${e.asset}`, debitAccount: "Crypto Borrowings", creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
-        } else if (e.activity === "interest") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Interest on ${e.asset}`, debitAccount: "Interest Expense", creditAccount: "Crypto Borrowings – Interest Payable", usdAmount: amtUsd, asset: e.asset })
-        } else if (e.activity === "liquidation") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Debt liquidated (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
-        }
-      } else if (e.accountType === "collateral") {
-        if (e.activity === "deposit") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Deposited ${e.asset} collateral`, debitAccount: `Collateral Crypto (${e.asset})`, creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
-        } else if (e.activity === "redemption") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Withdrew ${e.asset} collateral`, debitAccount: `Crypto (${e.asset})`, creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
-        } else if (e.activity === "liquidation") {
-          journalEntries.push({ date, timestamp: e.timestamp, description: `Collateral seized (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
-        }
-      }
-    })
-
-    // Group by month
-    const groups = new Map<string, JournalEntry[]>()
-    journalEntries.forEach((entry) => {
-      const d = new Date(entry.timestamp)
+      const d = new Date(e.timestamp)
       const key = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(entry)
+      if (!eventsByMonth.has(key)) eventsByMonth.set(key, [])
+      eventsByMonth.get(key)!.push(e)
     })
 
-    let periodDebt = 0
-    let periodCollateral = 0
+    // Running state
+    let runningDebt = 0
+    let runningCollateral = 0
+    const debtUnits: Record<string, number> = {}
+    const debtCostBasis: Record<string, number> = {}
+    const currentPrices: Record<string, number> = {}
 
-    const monthlyGroups: MonthlyGroup[] = Array.from(groups.entries()).map(([key, entries]) => {
-      const [y, m] = key.split("/")
+    const monthlyGroups: MonthlyGroup[] = []
+
+    allMonths.forEach((monthKey) => {
+      const [y, m] = monthKey.split("/")
       const monthName = new Date(Number(y), Number(m) - 1).toLocaleString("en-US", { month: "long" })
-      const openingDebt = periodDebt
-      const openingCollateral = periodCollateral
+      const daysInMonth = new Date(Number(y), Number(m), 0).getDate()
+      const lastDay = new Date(Number(y), Number(m) - 1, daysInMonth)
+        .toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
+      const lastDayIso = new Date(Number(y), Number(m) - 1, daysInMonth).toISOString()
+
+      const openingDebt = runningDebt
+      const openingCollateral = runningCollateral
+      const openingPrices = { ...currentPrices }
+
+      const entries: JournalEntry[] = []
       let totalBorrowed = 0, totalRepaid = 0, totalInterest = 0, totalLiquidated = 0
       let collateralIn = 0, collateralOut = 0
 
-      entries.forEach((entry) => {
-        if (entry.creditAccount === "Crypto Borrowings") totalBorrowed += entry.usdAmount
-        if (entry.debitAccount === "Crypto Borrowings" && !entry.description.includes("liquidated")) totalRepaid += entry.usdAmount
-        if (entry.debitAccount === "Interest Expense") totalInterest += entry.usdAmount
-        if (entry.description.includes("liquidated") || entry.description.includes("seized")) totalLiquidated += entry.usdAmount
-        if (entry.debitAccount.startsWith("Collateral Crypto")) collateralIn += entry.usdAmount
-        if (entry.creditAccount.startsWith("Collateral Crypto")) collateralOut += entry.usdAmount
+      // Real transaction events
+      const monthEvents = eventsByMonth.get(monthKey) || []
+      monthEvents.forEach((e) => {
+        const amt = parseFloat(e.amount)
+        const amtUsd = parseFloat(e.amountUsd)
+        const date = new Date(e.timestamp).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
+        if (amt > 0) currentPrices[e.asset] = amtUsd / amt
+
+        if (e.accountType === "debt") {
+          if (e.activity === "borrowing") {
+            const prevUnits = debtUnits[e.asset] || 0
+            const prevCostUsd = (debtCostBasis[e.asset] || 0) * prevUnits
+            debtUnits[e.asset] = prevUnits + amt
+            debtCostBasis[e.asset] = (prevCostUsd + amtUsd) / debtUnits[e.asset]
+            runningDebt += amtUsd
+            totalBorrowed += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Borrowed ${e.asset}`, debitAccount: `Crypto (${e.asset})`, creditAccount: "Crypto Borrowings", usdAmount: amtUsd, asset: e.asset })
+          } else if (e.activity === "repayment") {
+            debtUnits[e.asset] = Math.max(0, (debtUnits[e.asset] || 0) - amt)
+            runningDebt -= amtUsd
+            totalRepaid += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Repaid ${e.asset}`, debitAccount: "Crypto Borrowings", creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+          } else if (e.activity === "interest") {
+            runningDebt += amtUsd
+            totalInterest += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Interest on ${e.asset}`, debitAccount: "Interest Expense", creditAccount: "Crypto Borrowings – Interest Payable", usdAmount: amtUsd, asset: e.asset })
+          } else if (e.activity === "liquidation") {
+            debtUnits[e.asset] = Math.max(0, (debtUnits[e.asset] || 0) - amt)
+            runningDebt -= amtUsd
+            totalLiquidated += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Debt liquidated (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+          }
+        } else if (e.accountType === "collateral") {
+          if (e.activity === "deposit") {
+            runningCollateral += amtUsd
+            collateralIn += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Deposited ${e.asset} collateral`, debitAccount: `Collateral Crypto (${e.asset})`, creditAccount: `Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+          } else if (e.activity === "redemption") {
+            runningCollateral -= amtUsd
+            collateralOut += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Withdrew ${e.asset} collateral`, debitAccount: `Crypto (${e.asset})`, creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+          } else if (e.activity === "liquidation") {
+            runningCollateral -= amtUsd
+            collateralOut += amtUsd
+            entries.push({ date, timestamp: e.timestamp, description: `Collateral seized (${e.asset})`, debitAccount: "Crypto Borrowings", creditAccount: `Collateral Crypto (${e.asset})`, usdAmount: amtUsd, asset: e.asset })
+          }
+        }
       })
 
-      periodDebt = openingDebt + totalBorrowed + totalInterest - totalRepaid - totalLiquidated
-      periodCollateral = openingCollateral + collateralIn - collateralOut
+      // Computed: monthly interest accrual on outstanding debt
+      Object.entries(debtUnits).forEach(([asset, units]) => {
+        if (units <= 0) return
+        const price = currentPrices[asset] || debtCostBasis[asset] || 0
+        const balanceUsd = units * price
+        const rate = BORROW_RATES[asset] ?? DEFAULT_RATE
+        const interestUsd = balanceUsd * rate * (daysInMonth / 365)
+        if (interestUsd < 0.01) return
+        totalInterest += interestUsd
+        runningDebt += interestUsd
+        entries.push({
+          date: lastDay,
+          timestamp: lastDayIso,
+          description: `Interest accrual – ${asset} (${(rate * 100).toFixed(1)}% APY)`,
+          debitAccount: "Interest Expense",
+          creditAccount: "Crypto Borrowings – Interest Payable",
+          usdAmount: interestUsd,
+          asset,
+          computed: true,
+        })
+      })
 
-      const ltv = periodCollateral > 0 ? periodDebt / periodCollateral : 0
-      const liquidationRisk: MonthlyGroup["liquidationRisk"] =
-        totalLiquidated > 0 ? "liquidated" : ltv > 0.75 ? "high" : ltv > 0.5 ? "medium" : "low"
+      // Computed: embedded derivative – fair value change on open debt positions
+      let embeddedDerivative = 0
+      Object.entries(debtUnits).forEach(([asset, units]) => {
+        if (units <= 0 || !debtCostBasis[asset]) return
+        const openPrice = openingPrices[asset] || debtCostBasis[asset]
+        const closePrice = currentPrices[asset] || debtCostBasis[asset]
+        const priceChange = closePrice - openPrice
+        embeddedDerivative += units * priceChange
+      })
 
-      return {
-        period: key,
-        periodLabel: `${monthName} ${y}`,
-        entries,
-        openingDebt,
-        openingCollateral,
-        closingDebt: periodDebt,
-        closingCollateral: periodCollateral,
-        totalBorrowed,
-        totalRepaid,
-        totalInterest,
-        totalLiquidated,
-        liquidationRisk,
+      if (Math.abs(embeddedDerivative) >= 0.01) {
+        const isLoss = embeddedDerivative > 0
+        entries.push({
+          date: lastDay,
+          timestamp: lastDayIso,
+          description: `Embedded Derivative – Fair Value ${isLoss ? "Loss" : "Gain"} (price change on open positions)`,
+          debitAccount: isLoss ? "Fair Value Loss on Derivative" : "Crypto Borrowings",
+          creditAccount: isLoss ? "Crypto Borrowings" : "Fair Value Gain on Derivative",
+          usdAmount: Math.abs(embeddedDerivative),
+          asset: "FV",
+          computed: true,
+        })
+        if (isLoss) runningDebt += Math.abs(embeddedDerivative)
+        else runningDebt -= Math.abs(embeddedDerivative)
+      }
+
+      if (entries.length > 0 || openingDebt > 0) {
+        const ltv = runningCollateral > 0 ? runningDebt / runningCollateral : 0
+        const liquidationRisk: MonthlyGroup["liquidationRisk"] =
+          totalLiquidated > 0 ? "liquidated" : ltv > 0.75 ? "high" : ltv > 0.5 ? "medium" : "low"
+        monthlyGroups.push({
+          period: monthKey,
+          periodLabel: `${monthName} ${y}`,
+          entries,
+          openingDebt,
+          openingCollateral,
+          closingDebt: runningDebt,
+          closingCollateral: runningCollateral,
+          totalBorrowed,
+          totalRepaid,
+          totalInterest,
+          totalLiquidated,
+          embeddedDerivative,
+          liquidationRisk,
+        })
       }
     })
 
-    const ltv = periodCollateral > 0 ? periodDebt / periodCollateral : 0
-    return { monthlyGroups, currentDebt: periodDebt, currentCollateral: periodCollateral, currentLtv: ltv }
+    const ltv = runningCollateral > 0 ? runningDebt / runningCollateral : 0
+    return { monthlyGroups, currentDebt: runningDebt, currentCollateral: runningCollateral, currentLtv: ltv }
   }, [events])
 
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -906,7 +1002,7 @@ export default function ActivityPage() {
 
                           {/* Journal entries */}
                           {group.entries.map((entry, idx) => (
-                            <TableRow key={idx}>
+                            <TableRow key={idx} className={entry.computed ? "bg-muted/20 italic" : ""}>
                               <TableCell className="text-sm">{entry.date}</TableCell>
                               <TableCell className="text-sm">{entry.description}</TableCell>
                               <TableCell className="text-sm text-blue-700">{entry.debitAccount}</TableCell>
@@ -919,13 +1015,6 @@ export default function ActivityPage() {
                               </TableCell>
                             </TableRow>
                           ))}
-
-                          {/* Embedded derivative row */}
-                          <TableRow className="text-muted-foreground text-xs italic">
-                            <TableCell colSpan={4} className="pl-4">Embedded Derivative – Fair Value Adjustment (price oracle required)</TableCell>
-                            <TableCell className="text-right">—</TableCell>
-                            <TableCell className="text-right">—</TableCell>
-                          </TableRow>
 
                           {/* Closing balance row */}
                           <TableRow className="border-t-2 bg-muted/40 font-semibold">
@@ -944,6 +1033,11 @@ export default function ActivityPage() {
                               <span className="mr-4">Borrowed: <span className="font-mono font-medium text-foreground">${group.totalBorrowed.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
                               <span className="mr-4">Repaid: <span className="font-mono font-medium text-foreground">${group.totalRepaid.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
                               <span className="mr-4">Interest: <span className="font-mono font-medium text-foreground">${group.totalInterest.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              {Math.abs(group.embeddedDerivative) >= 0.01 && (
+                                <span className={`mr-4 ${group.embeddedDerivative > 0 ? "text-red-600" : "text-green-600"}`}>
+                                  FV Adj: <span className="font-mono font-medium">{group.embeddedDerivative > 0 ? "+" : "-"}${Math.abs(group.embeddedDerivative).toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>
+                                </span>
+                              )}
                               {group.totalLiquidated > 0 && <span className="text-red-600">Liquidated: <span className="font-mono font-medium">${group.totalLiquidated.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>}
                             </TableCell>
                           </TableRow>
