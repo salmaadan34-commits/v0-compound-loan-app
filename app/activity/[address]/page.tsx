@@ -269,7 +269,6 @@ export default function ActivityPage() {
               >
                 <ExternalLink className="h-3 w-3" />
               </a>
-              {source && <span className="ml-4 text-xs opacity-60">SRC: {source}</span>}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchActivity} disabled={loading}>
