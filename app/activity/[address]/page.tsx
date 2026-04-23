@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, Fragment } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -121,6 +121,7 @@ export default function ActivityPage() {
       token: string
       item: string
       date: string
+      timestamp: string
       start: number
       proceeds: number
       accruals: number
@@ -132,6 +133,7 @@ export default function ActivityPage() {
       token: string
       item: string
       date: string
+      timestamp: string
       start: number
       provided: number
       accruals: number
@@ -183,6 +185,7 @@ export default function ActivityPage() {
           token: e.asset,
           item: getItemLabel(e.activity, e.accountType),
           date,
+          timestamp: e.timestamp,
           start,
           provided,
           accruals,
@@ -215,6 +218,7 @@ export default function ActivityPage() {
           token: e.asset,
           item: getItemLabel(e.activity, e.accountType),
           date,
+          timestamp: e.timestamp,
           start,
           proceeds,
           accruals,
@@ -236,17 +240,17 @@ export default function ActivityPage() {
   }, [events])
 
   type LedgerEntry = {
-    token: string; item: string; date: string
+    token: string; item: string; date: string; timestamp: string
     start: number; proceeds: number; accruals: number; liquidated: number; payments: number; end: number
   }
   type CollateralLedgerEntry = {
-    token: string; item: string; date: string
+    token: string; item: string; date: string; timestamp: string
     start: number; provided: number; accruals: number; liquidated: number; reclaimed: number; end: number
   }
   type PeriodGroup<T> = { periodLabel: string; rows: T[]; subtotals: Record<string, number> }
 
-  function getPeriodKey(date: string, period: "monthly" | "quarterly" | "annual"): string {
-    const d = new Date(date)
+  function getPeriodKey(timestamp: string, period: "monthly" | "quarterly" | "annual"): string {
+    const d = new Date(timestamp)
     const y = d.getFullYear()
     const m = d.getMonth()
     if (period === "annual") return `${y}`
@@ -265,7 +269,7 @@ export default function ActivityPage() {
   const groupedLoanLedger = useMemo((): PeriodGroup<LedgerEntry>[] => {
     const groups: Map<string, LedgerEntry[]> = new Map()
     loanLedger.forEach((row) => {
-      const key = getPeriodKey(row.date, loanPeriod)
+      const key = getPeriodKey(row.timestamp, loanPeriod)
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(row)
     })
@@ -284,7 +288,7 @@ export default function ActivityPage() {
   const groupedCollateralLedger = useMemo((): PeriodGroup<CollateralLedgerEntry>[] => {
     const groups: Map<string, CollateralLedgerEntry[]> = new Map()
     collateralLedger.forEach((row) => {
-      const key = getPeriodKey(row.date, collateralPeriod)
+      const key = getPeriodKey(row.timestamp, collateralPeriod)
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(row)
     })
@@ -482,8 +486,8 @@ export default function ActivityPage() {
                         </TableHeader>
                         <TableBody>
                           {groupedLoanLedger.map((group) => (
-                            <>
-                              <TableRow key={`header-${group.periodLabel}`} className="bg-muted/60">
+                            <Fragment key={group.periodLabel}>
+                              <TableRow className="bg-muted/60">
                                 <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4">
                                   {group.periodLabel}
                                 </TableCell>
@@ -513,7 +517,7 @@ export default function ActivityPage() {
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow key={`subtotal-${group.periodLabel}`} className="border-t-2 font-semibold bg-muted/30">
+                              <TableRow className="border-t-2 font-semibold bg-muted/30">
                                 <TableCell colSpan={3} className="pl-6 text-sm text-muted-foreground">Subtotal</TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                                 <TableCell className="text-right font-mono">
@@ -530,7 +534,7 @@ export default function ActivityPage() {
                                 </TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                               </TableRow>
-                            </>
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>
@@ -577,8 +581,8 @@ export default function ActivityPage() {
                         </TableHeader>
                         <TableBody>
                           {groupedCollateralLedger.map((group) => (
-                            <>
-                              <TableRow key={`header-${group.periodLabel}`} className="bg-muted/60">
+                            <Fragment key={group.periodLabel}>
+                              <TableRow className="bg-muted/60">
                                 <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4">
                                   {group.periodLabel}
                                 </TableCell>
@@ -608,7 +612,7 @@ export default function ActivityPage() {
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow key={`subtotal-${group.periodLabel}`} className="border-t-2 font-semibold bg-muted/30">
+                              <TableRow className="border-t-2 font-semibold bg-muted/30">
                                 <TableCell colSpan={3} className="pl-6 text-sm text-muted-foreground">Subtotal</TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                                 <TableCell className="text-right font-mono">
@@ -625,7 +629,7 @@ export default function ActivityPage() {
                                 </TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                               </TableRow>
-                            </>
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>

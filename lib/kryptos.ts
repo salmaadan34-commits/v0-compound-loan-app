@@ -1,17 +1,11 @@
-const RAW_KRYPTOS_API_BASE = process.env.KRYPTOS_API_BASE
-const KRYPTOS_API_KEY = process.env.KRYPTOS_API_KEY
-
-if (!RAW_KRYPTOS_API_BASE) {
-  throw new Error("Missing KRYPTOS_API_BASE")
-}
-
-if (!KRYPTOS_API_KEY) {
-  throw new Error("Missing KRYPTOS_API_KEY")
-}
-
-const KRYPTOS_API_BASE = RAW_KRYPTOS_API_BASE.replace(/\/+$/, "")
-
 export async function kryptosFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const RAW_KRYPTOS_API_BASE = process.env.KRYPTOS_API_BASE
+  const KRYPTOS_API_KEY = process.env.KRYPTOS_API_KEY
+
+  if (!RAW_KRYPTOS_API_BASE) throw new Error("Missing KRYPTOS_API_BASE")
+  if (!KRYPTOS_API_KEY) throw new Error("Missing KRYPTOS_API_KEY")
+
+  const KRYPTOS_API_BASE = RAW_KRYPTOS_API_BASE.replace(/\/+$/, "")
   const normalizedPath = path.startsWith("/") ? path : `/${path}`
   const url = `${KRYPTOS_API_BASE}${normalizedPath}`
 
