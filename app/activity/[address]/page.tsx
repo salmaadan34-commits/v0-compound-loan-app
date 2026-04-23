@@ -614,8 +614,8 @@ export default function ActivityPage() {
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Collateral Summary */}
                 <Card className="overflow-hidden">
-                  <CardHeader className="pb-3 bg-green-50 border-b">
-                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-green-800">COLLATERAL</CardTitle>
+                  <CardHeader className="pb-3 bg-green-700 border-b">
+                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-white">COLLATERAL</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
@@ -647,8 +647,8 @@ export default function ActivityPage() {
 
                 {/* Debt Summary */}
                 <Card className="overflow-hidden">
-                  <CardHeader className="pb-3 bg-red-50 border-b">
-                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-red-800">DEBT</CardTitle>
+                  <CardHeader className="pb-3 bg-red-700 border-b">
+                    <CardTitle className="text-center text-sm font-semibold tracking-widest text-white">DEBT</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
