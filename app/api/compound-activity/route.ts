@@ -12,6 +12,8 @@ type CompoundEvent = {
   amountUsd: string
 }
 
+const USE_KRYPTOS = process.env.KRYPTOS_ENABLED === "true"
+
 const EVENT_MAP: Record<string, CompoundEvent["eventType"]> = {
   supply: "Supply",
   deposit: "Supply",
@@ -60,6 +62,48 @@ function toCompoundEvent(tx: any): CompoundEvent | null {
   }
 }
 
+function generateMockCompoundEvents(address: string): CompoundEvent[] {
+  const eventTypes: CompoundEvent["eventType"][] = ["Supply", "Withdraw", "Borrow", "Repay"]
+  const assets = ["ETH", "USDC", "DAI", "WBTC", "USDT"]
+  const assetPrices: Record<string, number> = {
+    ETH: 3200,
+    USDC: 1,
+    DAI: 1,
+    WBTC: 65000,
+    USDT: 1,
+  }
+
+  const seed = parseInt(address.slice(2, 10), 16)
+  const numEvents = 5 + (seed % 20)
+  const events: CompoundEvent[] = []
+  const now = Date.now()
+
+  for (let i = 0; i < numEvents; i++) {
+    const eventType = eventTypes[(seed + i) % eventTypes.length]
+    const asset = assets[(seed + i * 3) % assets.length]
+    const amount = (((seed + i * 7) % 1000) / 100 + 0.1).toFixed(4)
+    const price = assetPrices[asset]
+    const amountUsd = (parseFloat(amount) * price).toFixed(2)
+    const timestamp = new Date(now - i * 86400000 * ((seed % 5) + 1)).toISOString()
+    const blockNumber = (19000000 - i * 1000 - (seed % 500)).toString()
+    const txHashSeed = (seed + i * 13).toString(16).padStart(64, "0")
+    const transactionHash = `0x${txHashSeed.slice(0, 64)}`
+
+    events.push({
+      id: `${transactionHash}-${i}`,
+      blockNumber,
+      timestamp,
+      transactionHash,
+      eventType,
+      asset,
+      amount,
+      amountUsd,
+    })
+  }
+
+  return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+}
+
 export async function GET(request: NextRequest) {
   const address = request.nextUrl.searchParams.get("address")
 
@@ -71,10 +115,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid Ethereum address" }, { status: 400 })
   }
 
+  if (!USE_KRYPTOS) {
+    return NextResponse.json({
+      events: generateMockCompoundEvents(address),
+      source: "mock",
+    })
+  }
+
   try {
     const txResponse = await kryptosFetch<any>("/transactions", {
       method: "POST",
-      body: JSON.stringify({ walletAddress: address }),
+      body: JSON.stringify({
+        walletAddress: address,
+      }),
     })
 
     const rawTxs = Array.isArray(txResponse?.data)
@@ -93,12 +146,16 @@ export async function GET(request: NextRequest) {
           new Date(b!.timestamp).getTime() - new Date(a!.timestamp).getTime()
       )
 
-    return NextResponse.json({ events })
+    return NextResponse.json({
+      events,
+      source: "kryptos",
+    })
   } catch (error) {
     console.error("[v0] Kryptos compound activity error:", error)
 
     return NextResponse.json({
-      events: [],
+      events: generateMockCompoundEvents(address),
+      source: "mock-fallback",
       upstreamError: error instanceof Error ? error.message : "Unknown Kryptos error",
     })
   }
