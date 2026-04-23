@@ -546,9 +546,9 @@ export default function ActivityPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background p-4 md:p-8">
+    <main className="min-h-screen bg-black text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-8 p-4 rounded-xl border bg-muted/30">
+        <div className="flex items-center gap-4 mb-8 p-4 rounded-xl border border-zinc-800 bg-zinc-900">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
@@ -559,7 +559,7 @@ export default function ActivityPage() {
               <h1 className="text-xl font-bold">Compound Protocol</h1>
               {source && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  source === "kryptos" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                  source === "kryptos" ? "bg-green-900 text-green-300" : "bg-amber-900 text-amber-300"
                 }`}>
                   {source === "kryptos" ? "Live Data" : "Mock Data"}
                 </span>
@@ -601,7 +601,7 @@ export default function ActivityPage() {
           </div>
         ) : (
           <Tabs defaultValue="summary" className="w-full">
-            <TabsList className="grid w-full max-w-2xl grid-cols-5 mb-6">
+            <TabsList className="grid w-full max-w-2xl grid-cols-5 mb-6 bg-zinc-900 border border-zinc-800">
               <TabsTrigger value="summary">Summary</TabsTrigger>
               <TabsTrigger value="loan">Loan</TabsTrigger>
               <TabsTrigger value="collateral">Collateral</TabsTrigger>
@@ -613,17 +613,17 @@ export default function ActivityPage() {
             <TabsContent value="summary" className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Collateral Summary */}
-                <Card className="overflow-hidden">
-                  <CardHeader className="pb-3 bg-green-700 border-b">
+                <Card className="overflow-hidden bg-zinc-900 border-zinc-800">
+                  <CardHeader className="pb-3 bg-green-700 border-b border-green-800">
                     <CardTitle className="text-center text-sm font-semibold tracking-widest text-white">COLLATERAL</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-b-2 bg-muted/30">
-                          <TableHead className="font-semibold text-xs uppercase">Activity</TableHead>
+                        <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                          <TableHead className="font-semibold text-xs uppercase text-zinc-300">Activity</TableHead>
                           {collateralTokens.map((token) => (
-                            <TableHead key={token} className="text-right font-semibold text-xs uppercase">{token}</TableHead>
+                            <TableHead key={token} className="text-right font-semibold text-xs uppercase text-zinc-300">{token}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -631,10 +631,10 @@ export default function ActivityPage() {
                         {Object.entries(collateralSummary)
                           .filter(([, tokens]) => collateralTokens.some((t) => (tokens[t] || 0) !== 0))
                           .map(([activity, tokens]) => (
-                          <TableRow key={activity}>
-                            <TableCell className="font-medium text-sm">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
+                          <TableRow key={activity} className="border-zinc-800 hover:bg-zinc-800/50">
+                            <TableCell className="font-medium text-sm text-zinc-200">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
                             {collateralTokens.map((token) => (
-                              <TableCell key={token} className="text-right font-mono text-sm">
+                              <TableCell key={token} className="text-right font-mono text-sm text-green-400">
                                 {formatUsd(tokens[token] || 0)}
                               </TableCell>
                             ))}
@@ -646,17 +646,17 @@ export default function ActivityPage() {
                 </Card>
 
                 {/* Debt Summary */}
-                <Card className="overflow-hidden">
-                  <CardHeader className="pb-3 bg-red-700 border-b">
+                <Card className="overflow-hidden bg-zinc-900 border-zinc-800">
+                  <CardHeader className="pb-3 bg-red-700 border-b border-red-800">
                     <CardTitle className="text-center text-sm font-semibold tracking-widest text-white">DEBT</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-b-2 bg-muted/30">
-                          <TableHead className="font-semibold text-xs uppercase">Activity</TableHead>
+                        <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                          <TableHead className="font-semibold text-xs uppercase text-zinc-300">Activity</TableHead>
                           {debtTokens.map((token) => (
-                            <TableHead key={token} className="text-right font-semibold text-xs uppercase">{token}</TableHead>
+                            <TableHead key={token} className="text-right font-semibold text-xs uppercase text-zinc-300">{token}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -664,10 +664,10 @@ export default function ActivityPage() {
                         {Object.entries(debtSummary)
                           .filter(([, tokens]) => debtTokens.some((t) => (tokens[t] || 0) !== 0))
                           .map(([activity, tokens]) => (
-                          <TableRow key={activity}>
-                            <TableCell className="font-medium text-sm">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
+                          <TableRow key={activity} className="border-zinc-800 hover:bg-zinc-800/50">
+                            <TableCell className="font-medium text-sm text-zinc-200">{ACTIVITY_LABELS[activity] ?? activity}</TableCell>
                             {debtTokens.map((token) => (
-                              <TableCell key={token} className="text-right font-mono text-sm">
+                              <TableCell key={token} className={`text-right font-mono text-sm ${activity === "Borrow" ? "text-red-400" : "text-green-400"}`}>
                                 {formatUsd(tokens[token] || 0, activity === "Borrow")}
                               </TableCell>
                             ))}
@@ -682,9 +682,9 @@ export default function ActivityPage() {
 
             {/* Loan Ledger Tab */}
             <TabsContent value="loan">
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg">LOAN</CardTitle>
+              <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between border-b border-zinc-800">
+                  <CardTitle className="text-lg text-white">LOAN</CardTitle>
                   <Select value={loanPeriod} onValueChange={(v) => setLoanPeriod(v as typeof loanPeriod)}>
                     <SelectTrigger className="w-36 h-8 text-sm">
                       <SelectValue />
@@ -698,58 +698,58 @@ export default function ActivityPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {loanLedger.length === 0 ? (
-                    <p className="text-center py-12 text-muted-foreground">No loan activity found</p>
+                    <p className="text-center py-12 text-zinc-500">No loan activity found</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
-                          <TableRow className="border-b-2">
-                            <TableHead className="font-bold">Token</TableHead>
-                            <TableHead className="font-bold">Item</TableHead>
-                            <TableHead className="font-bold">Date</TableHead>
-                            <TableHead className="text-right font-bold italic">Start</TableHead>
-                            <TableHead className="text-right font-bold">Proceeds</TableHead>
-                            <TableHead className="text-right font-bold">Accruals</TableHead>
-                            <TableHead className="text-right font-bold">Liquidated</TableHead>
-                            <TableHead className="text-right font-bold">Payments</TableHead>
-                            <TableHead className="text-right font-bold italic">End</TableHead>
+                          <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                            <TableHead className="font-bold text-zinc-300">Token</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Item</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Date</TableHead>
+                            <TableHead className="text-right font-bold italic text-zinc-300">Start</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Proceeds</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Accruals</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Liquidated</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Payments</TableHead>
+                            <TableHead className="text-right font-bold italic text-zinc-300">End</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {groupedLoanLedger.map((group) => (
                             <Fragment key={group.periodLabel}>
-                              <TableRow className="bg-muted/60">
-                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4">
+                              <TableRow className="bg-zinc-800 border-zinc-700">
+                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4 text-zinc-300">
                                   {group.periodLabel}
                                 </TableCell>
                               </TableRow>
                               {group.rows.map((entry, idx) => (
-                                <TableRow key={`${group.periodLabel}-${idx}`}>
-                                  <TableCell className="font-medium pl-6">{entry.token}</TableCell>
-                                  <TableCell>{entry.item}</TableCell>
-                                  <TableCell>{entry.date}</TableCell>
-                                  <TableCell className="text-right font-mono">
+                                <TableRow key={`${group.periodLabel}-${idx}`} className="border-zinc-800 hover:bg-zinc-800/50">
+                                  <TableCell className="font-medium pl-6 text-white">{entry.token}</TableCell>
+                                  <TableCell className="text-zinc-300">{entry.item}</TableCell>
+                                  <TableCell className="text-zinc-400">{entry.date}</TableCell>
+                                  <TableCell className="text-right font-mono text-zinc-300">
                                     {formatLedgerValue(entry.start, entry.start < 0)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-red-400">
                                     {formatLedgerValue(entry.proceeds, true)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-red-400">
                                     {formatLedgerValue(entry.accruals, true)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.liquidated)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.payments)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-zinc-300">
                                     {formatLedgerValue(entry.end, entry.end < 0)}
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow className="border-t-2 font-semibold bg-muted/30">
-                                <TableCell colSpan={3} className="pl-6 text-sm text-muted-foreground">Subtotal</TableCell>
+                              <TableRow className="border-t border-zinc-700 font-semibold bg-zinc-800/50">
+                                <TableCell colSpan={3} className="pl-6 text-sm text-zinc-400">Subtotal</TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.proceeds, true)}
@@ -777,9 +777,9 @@ export default function ActivityPage() {
 
             {/* Collateral Ledger Tab */}
             <TabsContent value="collateral">
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg">COLLATERAL</CardTitle>
+              <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between border-b border-zinc-800">
+                  <CardTitle className="text-lg text-white">COLLATERAL</CardTitle>
                   <Select value={collateralPeriod} onValueChange={(v) => setCollateralPeriod(v as typeof collateralPeriod)}>
                     <SelectTrigger className="w-36 h-8 text-sm">
                       <SelectValue />
@@ -793,58 +793,58 @@ export default function ActivityPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {collateralLedger.length === 0 ? (
-                    <p className="text-center py-12 text-muted-foreground">No collateral activity found</p>
+                    <p className="text-center py-12 text-zinc-500">No collateral activity found</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
-                          <TableRow className="border-b-2">
-                            <TableHead className="font-bold">Token</TableHead>
-                            <TableHead className="font-bold">Item</TableHead>
-                            <TableHead className="font-bold">Date</TableHead>
-                            <TableHead className="text-right font-bold italic">Start</TableHead>
-                            <TableHead className="text-right font-bold">Provided</TableHead>
-                            <TableHead className="text-right font-bold">Accruals</TableHead>
-                            <TableHead className="text-right font-bold">Liquidated</TableHead>
-                            <TableHead className="text-right font-bold">Reclaimed</TableHead>
-                            <TableHead className="text-right font-bold italic">End</TableHead>
+                          <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                            <TableHead className="font-bold text-zinc-300">Token</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Item</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Date</TableHead>
+                            <TableHead className="text-right font-bold italic text-zinc-300">Start</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Provided</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Accruals</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Liquidated</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">Reclaimed</TableHead>
+                            <TableHead className="text-right font-bold italic text-zinc-300">End</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {groupedCollateralLedger.map((group) => (
                             <Fragment key={group.periodLabel}>
-                              <TableRow className="bg-muted/60">
-                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4">
+                              <TableRow className="bg-zinc-800 border-zinc-700">
+                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4 text-zinc-300">
                                   {group.periodLabel}
                                 </TableCell>
                               </TableRow>
                               {group.rows.map((entry, idx) => (
-                                <TableRow key={`${group.periodLabel}-${idx}`}>
-                                  <TableCell className="font-medium pl-6">{entry.token}</TableCell>
-                                  <TableCell>{entry.item}</TableCell>
-                                  <TableCell>{entry.date}</TableCell>
-                                  <TableCell className="text-right font-mono">
+                                <TableRow key={`${group.periodLabel}-${idx}`} className="border-zinc-800 hover:bg-zinc-800/50">
+                                  <TableCell className="font-medium pl-6 text-white">{entry.token}</TableCell>
+                                  <TableCell className="text-zinc-300">{entry.item}</TableCell>
+                                  <TableCell className="text-zinc-400">{entry.date}</TableCell>
+                                  <TableCell className="text-right font-mono text-zinc-300">
                                     {formatLedgerValue(entry.start)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.provided)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-red-400">
                                     {formatLedgerValue(entry.accruals, true)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-red-400">
                                     {formatLedgerValue(entry.liquidated, true)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.reclaimed, true)}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono">
+                                  <TableCell className="text-right font-mono text-zinc-300">
                                     {formatLedgerValue(entry.end)}
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow className="border-t-2 font-semibold bg-muted/30">
-                                <TableCell colSpan={3} className="pl-6 text-sm text-muted-foreground">Subtotal</TableCell>
+                              <TableRow className="border-t border-zinc-700 font-semibold bg-zinc-800/50">
+                                <TableCell colSpan={3} className="pl-6 text-sm text-zinc-400">Subtotal</TableCell>
                                 <TableCell className="text-right font-mono">—</TableCell>
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.provided)}
@@ -872,59 +872,59 @@ export default function ActivityPage() {
 
             {/* Transactions Tab */}
             <TabsContent value="transactions">
-            <Card>
-              <CardHeader>
-                <CardTitle>Transaction History</CardTitle>
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardHeader className="border-b border-zinc-800">
+                <CardTitle className="text-white">Transaction History</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow className="border-b-2">
-                        <TableHead className="font-bold">TX HASH</TableHead>
-                        <TableHead className="font-bold">ACCOUNT</TableHead>
-                        <TableHead className="font-bold">ACTIVITY</TableHead>
-                        <TableHead className="font-bold">TIMESTAMP</TableHead>
-                        <TableHead className="font-bold">EVENT NAME</TableHead>
-                        <TableHead className="font-bold">TOKEN SYMBOL</TableHead>
-                        <TableHead className="text-right font-bold">AMOUNT</TableHead>
-                        <TableHead className="text-right font-bold">AMOUNT USD</TableHead>
+                      <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                        <TableHead className="font-bold text-zinc-300">TX HASH</TableHead>
+                        <TableHead className="font-bold text-zinc-300">ACCOUNT</TableHead>
+                        <TableHead className="font-bold text-zinc-300">ACTIVITY</TableHead>
+                        <TableHead className="font-bold text-zinc-300">TIMESTAMP</TableHead>
+                        <TableHead className="font-bold text-zinc-300">EVENT NAME</TableHead>
+                        <TableHead className="font-bold text-zinc-300">TOKEN</TableHead>
+                        <TableHead className="text-right font-bold text-zinc-300">AMOUNT</TableHead>
+                        <TableHead className="text-right font-bold text-zinc-300">AMOUNT USD</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {events.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                          <TableCell colSpan={8} className="text-center py-12 text-zinc-500">
                             No Compound activity found for this address
                           </TableCell>
                         </TableRow>
                       ) : (
-                        events.map((event, idx) => (
-                          <TableRow key={event.id}>
+                        events.map((event) => (
+                          <TableRow key={event.id} className="border-zinc-800 hover:bg-zinc-800/50">
                             <TableCell className="font-mono text-sm">
                               <a
                                 href={`https://etherscan.io/tx/${event.transactionHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-primary hover:underline inline-flex items-center gap-1"
+                                className="text-blue-400 hover:underline inline-flex items-center gap-1"
                               >
                                 {formatAddress(event.transactionHash)}
                               </a>
                             </TableCell>
                             <TableCell>
-                              <span className={event.accountType === "collateral" ? "text-green-600" : "text-amber-600"}>
+                              <span className={event.accountType === "collateral" ? "text-green-400" : "text-amber-400"}>
                                 {event.accountType}
                               </span>
                             </TableCell>
-                            <TableCell>{event.activity}</TableCell>
-                            <TableCell>{formatDate(event.timestamp)}</TableCell>
-                            <TableCell className="text-blue-600">{event.eventName}</TableCell>
-                            <TableCell className="text-red-600 font-medium">{event.asset}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">
+                            <TableCell className="text-zinc-300">{event.activity}</TableCell>
+                            <TableCell className="text-zinc-400">{formatDate(event.timestamp)}</TableCell>
+                            <TableCell className="text-blue-400">{event.eventName}</TableCell>
+                            <TableCell className="text-white font-medium">{event.asset}</TableCell>
+                            <TableCell className="text-right font-mono text-green-400">
                               {parseFloat(event.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                             </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {parseFloat(event.amountUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            <TableCell className="text-right font-mono text-zinc-200">
+                              ${parseFloat(event.amountUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                             </TableCell>
                           </TableRow>
                         ))
@@ -940,61 +940,61 @@ export default function ActivityPage() {
             <TabsContent value="borrower" className="space-y-6">
               {/* Current Position Summary */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
+                <Card className="bg-zinc-900 border-zinc-800">
                   <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Owed</p>
-                    <p className="text-lg font-bold font-mono">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Owed</p>
+                    <p className="text-lg font-bold font-mono text-red-400">
                       ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">Crypto Borrowings</p>
+                    <p className="text-xs text-zinc-500">Crypto Borrowings</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="bg-zinc-900 border-zinc-800">
                   <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Collateral</p>
-                    <p className="text-lg font-bold font-mono">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Collateral</p>
+                    <p className="text-lg font-bold font-mono text-green-400">
                       ${borrowerRecon.currentCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">Collateral Crypto</p>
+                    <p className="text-xs text-zinc-500">Collateral Crypto</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="bg-zinc-900 border-zinc-800">
                   <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">LTV Ratio</p>
-                    <p className={`text-lg font-bold font-mono ${borrowerRecon.currentLtv > 0.75 ? "text-red-600" : borrowerRecon.currentLtv > 0.5 ? "text-amber-600" : "text-green-600"}`}>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">LTV Ratio</p>
+                    <p className={`text-lg font-bold font-mono ${borrowerRecon.currentLtv > 0.75 ? "text-red-400" : borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"}`}>
                       {(borrowerRecon.currentLtv * 100).toFixed(1)}%
                     </p>
-                    <p className="text-xs text-muted-foreground">Debt / Collateral</p>
+                    <p className="text-xs text-zinc-500">Debt / Collateral</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="bg-zinc-900 border-zinc-800">
                   <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Liquidation Risk</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Liquidation Risk</p>
                     <p className={`text-lg font-bold ${
-                      borrowerRecon.currentLtv > 0.75 ? "text-red-600" :
-                      borrowerRecon.currentLtv > 0.5 ? "text-amber-600" : "text-green-600"
+                      borrowerRecon.currentLtv > 0.75 ? "text-red-400" :
+                      borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"
                     }`}>
                       {borrowerRecon.currentLtv > 0.75 ? "HIGH" : borrowerRecon.currentLtv > 0.5 ? "MEDIUM" : "LOW"}
                     </p>
-                    <p className="text-xs text-muted-foreground">Based on LTV</p>
+                    <p className="text-xs text-zinc-500">Based on LTV</p>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Monthly Reconciliation */}
               {borrowerRecon.monthlyGroups.length === 0 ? (
-                <p className="text-center py-12 text-muted-foreground">No borrower activity found</p>
+                <p className="text-center py-12 text-zinc-500">No borrower activity found</p>
               ) : (
                 borrowerRecon.monthlyGroups.map((group) => (
-                  <Card key={group.period}>
-                    <CardHeader className="pb-2">
+                  <Card key={group.period} className="bg-zinc-900 border-zinc-800">
+                    <CardHeader className="pb-2 border-b border-zinc-800">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{group.periodLabel}</CardTitle>
+                        <CardTitle className="text-base text-white">{group.periodLabel}</CardTitle>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          group.liquidationRisk === "liquidated" ? "bg-red-100 text-red-700" :
-                          group.liquidationRisk === "high" ? "bg-red-100 text-red-700" :
-                          group.liquidationRisk === "medium" ? "bg-amber-100 text-amber-700" :
-                          "bg-green-100 text-green-700"
+                          group.liquidationRisk === "liquidated" ? "bg-red-900 text-red-300" :
+                          group.liquidationRisk === "high" ? "bg-red-900 text-red-300" :
+                          group.liquidationRisk === "medium" ? "bg-amber-900 text-amber-300" :
+                          "bg-green-900 text-green-300"
                         }`}>
                           {group.liquidationRisk === "liquidated" ? "LIQUIDATED" :
                            group.liquidationRisk === "high" ? "HIGH RISK" :
@@ -1005,18 +1005,18 @@ export default function ActivityPage() {
                     <CardContent className="p-0">
                       <Table>
                         <TableHeader>
-                          <TableRow className="border-b-2">
-                            <TableHead className="font-bold">Date</TableHead>
-                            <TableHead className="font-bold">Description</TableHead>
-                            <TableHead className="font-bold">Debit Account</TableHead>
-                            <TableHead className="font-bold">Credit Account</TableHead>
-                            <TableHead className="text-right font-bold">DR (USD)</TableHead>
-                            <TableHead className="text-right font-bold">CR (USD)</TableHead>
+                          <TableRow className="border-b border-zinc-700 bg-zinc-800">
+                            <TableHead className="font-bold text-zinc-300">Date</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Description</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Debit Account</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Credit Account</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">DR (USD)</TableHead>
+                            <TableHead className="text-right font-bold text-zinc-300">CR (USD)</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {/* Opening balance row */}
-                          <TableRow className="bg-muted/40 text-sm text-muted-foreground">
+                          <TableRow className="bg-zinc-800/60 text-sm text-zinc-400 border-zinc-700">
                             <TableCell colSpan={4} className="pl-4 italic">Opening Balance</TableCell>
                             <TableCell className="text-right font-mono">{group.openingDebt > 0 ? `$${group.openingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</TableCell>
                             <TableCell className="text-right font-mono">{group.openingCollateral > 0 ? `$${group.openingCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</TableCell>
@@ -1024,23 +1024,23 @@ export default function ActivityPage() {
 
                           {/* Journal entries */}
                           {group.entries.map((entry, idx) => (
-                            <TableRow key={idx} className={entry.computed ? "bg-muted/20 italic" : ""}>
-                              <TableCell className="text-sm">{entry.date}</TableCell>
-                              <TableCell className="text-sm">{entry.description}</TableCell>
-                              <TableCell className="text-sm text-blue-700">{entry.debitAccount}</TableCell>
-                              <TableCell className="text-sm text-amber-700 pl-6">{entry.creditAccount}</TableCell>
-                              <TableCell className="text-right font-mono text-sm">
+                            <TableRow key={idx} className={`border-zinc-800 ${entry.computed ? "bg-zinc-800/30 italic" : "hover:bg-zinc-800/50"}`}>
+                              <TableCell className="text-sm text-zinc-400">{entry.date}</TableCell>
+                              <TableCell className="text-sm text-zinc-200">{entry.description}</TableCell>
+                              <TableCell className="text-sm text-blue-400">{entry.debitAccount}</TableCell>
+                              <TableCell className="text-sm text-amber-400 pl-6">{entry.creditAccount}</TableCell>
+                              <TableCell className="text-right font-mono text-sm text-red-400">
                                 ${entry.usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm text-green-400">
                                 ${entry.usdAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </TableCell>
                             </TableRow>
                           ))}
 
                           {/* Closing balance row */}
-                          <TableRow className="border-t-2 bg-muted/40 font-semibold">
-                            <TableCell colSpan={4} className="pl-4">Closing Balance</TableCell>
+                          <TableRow className="border-t border-zinc-700 bg-zinc-800/60 font-semibold">
+                            <TableCell colSpan={4} className="pl-4 text-white">Closing Balance</TableCell>
                             <TableCell className="text-right font-mono">
                               {group.closingDebt > 0 ? `$${group.closingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                             </TableCell>
@@ -1050,11 +1050,11 @@ export default function ActivityPage() {
                           </TableRow>
 
                           {/* Period summary */}
-                          <TableRow className="bg-muted/20 text-xs text-muted-foreground">
+                          <TableRow className="bg-zinc-950 text-xs text-zinc-500 border-zinc-800">
                             <TableCell colSpan={6} className="pl-4 py-2">
-                              <span className="mr-4">Borrowed: <span className="font-mono font-medium text-foreground">${group.totalBorrowed.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
-                              <span className="mr-4">Repaid: <span className="font-mono font-medium text-foreground">${group.totalRepaid.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
-                              <span className="mr-4">Interest: <span className="font-mono font-medium text-foreground">${group.totalInterest.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Borrowed: <span className="font-mono font-medium text-red-400">${group.totalBorrowed.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Repaid: <span className="font-mono font-medium text-green-400">${group.totalRepaid.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Interest: <span className="font-mono font-medium text-red-400">${group.totalInterest.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span></span>
                               {Math.abs(group.embeddedDerivative) >= 0.01 && (
                                 <span className={`mr-4 ${group.embeddedDerivative > 0 ? "text-red-600" : "text-green-600"}`}>
                                   FV Adj: <span className="font-mono font-medium">{group.embeddedDerivative > 0 ? "+" : "-"}${Math.abs(group.embeddedDerivative).toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>
