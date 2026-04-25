@@ -881,6 +881,7 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell>
                                     {(() => {
+                                      if (entry.item === "Paid by borrower") return <span className="text-[10px] text-green-500 font-semibold">PAID</span>
                                       const pos = borrowerRecon.positions.find(p => p.asset === entry.token)
                                       if (!pos) return <span className="text-zinc-600 text-xs">—</span>
                                       const badge =
