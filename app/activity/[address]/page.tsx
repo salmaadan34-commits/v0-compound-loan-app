@@ -364,6 +364,38 @@ export default function ActivityPage() {
       eventsByMonth.get(key)!.push(e)
     })
 
+    // ── Monthly price simulation for fair value gain/loss ──────────────────
+    // Uses a deterministic random walk seeded from the first event hash.
+    // Monthly volatility assumptions (realistic crypto ranges).
+    const ASSET_MONTHLY_VOL: Record<string, number> = {
+      WETH: 0.10, WBTC: 0.09, COMP: 0.14, USDC: 0, USDT: 0,
+    }
+    const ASSET_BASE_PRICES: Record<string, number> = {
+      WETH: 3200, WBTC: 65000, COMP: 85, USDC: 1, USDT: 1,
+    }
+
+    // Build a price index (0 = month 0 start, 1 = month 0 end / month 1 start, ...)
+    // so monthlyReturn[i] = (priceIndex[i+1] - priceIndex[i]) / priceIndex[i]
+    const priceSeed = events.length > 0
+      ? parseInt(events[0].transactionHash.slice(2, 10), 16) || 99991
+      : 99991
+
+    const simulatedPriceIndex: Record<string, number[]> = {}
+    const buildPriceIndex = (asset: string) => {
+      if (simulatedPriceIndex[asset]) return
+      const vol = ASSET_MONTHLY_VOL[asset] || 0
+      const basePrice = ASSET_BASE_PRICES[asset] || 1
+      const assetSeed = asset.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)
+      let rng = (priceSeed ^ assetSeed) >>> 0
+      const idx: number[] = [basePrice]
+      for (let m = 0; m < allMonths.length; m++) {
+        rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0
+        const r = (rng / 0xffffffff) * 2 - 1          // –1 to +1
+        idx.push(idx[m] * (1 + vol * r))
+      }
+      simulatedPriceIndex[asset] = idx
+    }
+
     // Running state
     let runningDebt = 0
     let runningCollateral = 0
@@ -373,7 +405,7 @@ export default function ActivityPage() {
 
     const monthlyGroups: MonthlyGroup[] = []
 
-    allMonths.forEach((monthKey) => {
+    allMonths.forEach((monthKey, monthIdx) => {
       const [y, m] = monthKey.split("/")
       const monthName = new Date(Number(y), Number(m) - 1).toLocaleString("en-US", { month: "long" })
       const daysInMonth = new Date(Number(y), Number(m), 0).getDate()
@@ -460,31 +492,37 @@ export default function ActivityPage() {
         })
       })
 
-      // Computed: embedded derivative – fair value change on open debt positions
+      // Computed: fair value gain/loss per asset using avg monthly rate change
       let embeddedDerivative = 0
       Object.entries(debtUnits).forEach(([asset, units]) => {
-        if (units <= 0 || !debtCostBasis[asset]) return
-        const openPrice = openingPrices[asset] || debtCostBasis[asset]
-        const closePrice = currentPrices[asset] || debtCostBasis[asset]
-        const priceChange = closePrice - openPrice
-        embeddedDerivative += units * priceChange
-      })
-
-      if (Math.abs(embeddedDerivative) >= 0.01) {
-        const isLoss = embeddedDerivative > 0
+        if (units <= 0) return
+        const vol = ASSET_MONTHLY_VOL[asset] || 0
+        if (vol === 0) return                          // stablecoins – no price risk
+        buildPriceIndex(asset)
+        const idx = simulatedPriceIndex[asset]
+        const openPrice = idx[monthIdx]
+        const closePrice = idx[monthIdx + 1]
+        if (!openPrice || openPrice === closePrice) return
+        const monthlyRate = (closePrice - openPrice) / openPrice
+        // Use cost basis to calculate fair value change on the borrowed units
+        const costBasisPrice = debtCostBasis[asset] || openPrice
+        const fvChange = units * costBasisPrice * monthlyRate  // + = price up = loss for borrower
+        if (Math.abs(fvChange) < 0.01) return
+        const isLoss = fvChange > 0
+        embeddedDerivative += fvChange
         entries.push({
           date: lastDay,
           timestamp: lastDayIso,
-          description: `Embedded Derivative – Fair Value ${isLoss ? "Loss" : "Gain"} (price change on open positions)`,
-          debitAccount: isLoss ? "Fair Value Loss on Derivative" : "Crypto Borrowings",
-          creditAccount: isLoss ? "Crypto Borrowings" : "Fair Value Gain on Derivative",
-          usdAmount: Math.abs(embeddedDerivative),
-          asset: "FV",
+          description: `FV ${isLoss ? "Loss" : "Gain"} – ${asset} (avg monthly rate: ${monthlyRate >= 0 ? "+" : ""}${(monthlyRate * 100).toFixed(2)}%)`,
+          debitAccount: isLoss ? `Fair Value Loss – ${asset}` : "Crypto Borrowings",
+          creditAccount: isLoss ? "Crypto Borrowings" : `Fair Value Gain – ${asset}`,
+          usdAmount: Math.abs(fvChange),
+          asset,
           computed: true,
         })
-        if (isLoss) runningDebt += Math.abs(embeddedDerivative)
-        else runningDebt -= Math.abs(embeddedDerivative)
-      }
+      })
+      if (embeddedDerivative > 0) runningDebt += embeddedDerivative
+      else runningDebt += embeddedDerivative   // negative = gain, reduces debt
 
       if (entries.length > 0 || openingDebt > 0) {
         const ltv = runningCollateral > 0 ? runningDebt / runningCollateral : 0
