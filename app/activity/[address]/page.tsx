@@ -1085,6 +1085,11 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.reclaimed, true)}
+                                    {entry.reclaimed > 0 && entry.start > 0 && (
+                                      <span className="block text-[10px] text-zinc-500">
+                                        {((entry.reclaimed / entry.start) * 100).toFixed(1)}% of collateral
+                                      </span>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-zinc-300">
                                     {formatLedgerValue(entry.end)}
