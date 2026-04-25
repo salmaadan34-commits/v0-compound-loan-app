@@ -648,7 +648,7 @@ export default function ActivityPage() {
               <TabsTrigger value="loan">Loan</TabsTrigger>
               <TabsTrigger value="collateral">Collateral</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
-              <TabsTrigger value="borrower">Borrower</TabsTrigger>
+              <TabsTrigger value="borrower">JE</TabsTrigger>
             </TabsList>
 
             {/* Summary Tab */}
@@ -724,6 +724,44 @@ export default function ActivityPage() {
 
             {/* Loan Ledger Tab */}
             <TabsContent value="loan">
+              {/* LTV & Liquidation Risk — based on borrowerRecon running totals */}
+              {borrowerRecon.currentDebt > 0 && (
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Total Debt</p>
+                    <p className="font-mono font-bold text-red-400 text-lg">
+                      ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[11px] text-zinc-600 mt-0.5">Debt / Crypto Borrowings</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">LTV Ratio</p>
+                    <p className={`font-mono font-bold text-lg ${
+                      borrowerRecon.currentLtv >= 0.80 ? "text-red-400" :
+                      borrowerRecon.currentLtv >= 0.65 ? "text-amber-400" :
+                      borrowerRecon.currentLtv >= 0.50 ? "text-yellow-400" :
+                      "text-green-400"
+                    }`}>
+                      {(borrowerRecon.currentLtv * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-[11px] text-zinc-600 mt-0.5">Debt / Collateral</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Liquidation Risk</p>
+                    {(() => {
+                      const ltv = borrowerRecon.currentLtv
+                      const label = ltv >= 0.80 ? "CRITICAL" : ltv >= 0.65 ? "AT RISK" : ltv >= 0.50 ? "MONITOR" : "LOW"
+                      const color = ltv >= 0.80 ? "text-red-400" : ltv >= 0.65 ? "text-amber-400" : ltv >= 0.50 ? "text-yellow-400" : "text-green-400"
+                      return (
+                        <>
+                          <p className={`font-bold text-lg ${color}`}>{label}</p>
+                          <p className="text-[11px] text-zinc-600 mt-0.5">Based on LTV · Liq. threshold 80%</p>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader className="pb-2 flex flex-row items-center justify-between border-b border-zinc-800">
                   <CardTitle className="text-lg text-white">LOAN</CardTitle>
@@ -980,28 +1018,6 @@ export default function ActivityPage() {
 
             {/* Borrower Reconciliation Tab */}
             <TabsContent value="borrower" className="space-y-6">
-              {/* Compact overall summary */}
-              <div className="flex flex-wrap gap-6 px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900 text-sm">
-                <div>
-                  <span className="text-zinc-500">Total Owed </span>
-                  <span className="font-mono font-bold text-red-400">
-                    ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-500">Collateral </span>
-                  <span className="font-mono font-bold text-green-400">
-                    ${borrowerRecon.currentCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-500">Blended LTV </span>
-                  <span className={`font-mono font-bold ${borrowerRecon.currentLtv > 0.75 ? "text-red-400" : borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"}`}>
-                    {(borrowerRecon.currentLtv * 100).toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-
               {/* Per-position risk */}
               {borrowerRecon.positions.length > 0 && (
                 <div className="space-y-3">
@@ -1140,19 +1156,7 @@ export default function ActivityPage() {
                 borrowerRecon.monthlyGroups.map((group) => (
                   <Card key={group.period} className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2 border-b border-zinc-800">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base text-white">{group.periodLabel}</CardTitle>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          group.liquidationRisk === "liquidated" ? "bg-red-900 text-red-300" :
-                          group.liquidationRisk === "high" ? "bg-red-900 text-red-300" :
-                          group.liquidationRisk === "medium" ? "bg-amber-900 text-amber-300" :
-                          "bg-green-900 text-green-300"
-                        }`}>
-                          {group.liquidationRisk === "liquidated" ? "LIQUIDATED" :
-                           group.liquidationRisk === "high" ? "HIGH RISK" :
-                           group.liquidationRisk === "medium" ? "MEDIUM RISK" : "LOW RISK"}
-                        </span>
-                      </div>
+                      <CardTitle className="text-base text-white">{group.periodLabel}</CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
                       <Table>
