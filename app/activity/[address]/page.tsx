@@ -508,8 +508,57 @@ export default function ActivityPage() {
       }
     })
 
+    const LIQUIDATION_THRESHOLD = 0.80
+    const SAFE_TARGET = 0.65
+    const MONITOR_THRESHOLD = 0.50
+
     const ltv = runningCollateral > 0 ? runningDebt / runningCollateral : 0
-    return { monthlyGroups, currentDebt: runningDebt, currentCollateral: runningCollateral, currentLtv: ltv }
+
+    const positions = Object.entries(debtUnits)
+      .filter(([, units]) => units > 0)
+      .map(([asset, units]) => {
+        const price = currentPrices[asset] || debtCostBasis[asset] || 0
+        const debtUsd = units * price
+        // Attribute collateral proportionally to each debt position
+        const debtShare = runningDebt > 0 ? debtUsd / runningDebt : 1
+        const collateralUsd = runningCollateral * debtShare
+        const posLtv = collateralUsd > 0 ? debtUsd / collateralUsd : debtUsd > 0 ? Infinity : 0
+
+        const riskLevel: "healthy" | "monitor" | "at-risk" | "critical" =
+          posLtv >= LIQUIDATION_THRESHOLD ? "critical" :
+          posLtv >= SAFE_TARGET ? "at-risk" :
+          posLtv >= MONITOR_THRESHOLD ? "monitor" : "healthy"
+
+        // How much collateral to ADD to reach safe LTV
+        const collateralToAddUsd = Math.max(0, debtUsd / SAFE_TARGET - collateralUsd)
+
+        // How much debt to REPAY to reach safe LTV
+        const debtToRepayUsd = Math.max(0, debtUsd - collateralUsd * SAFE_TARGET)
+        const debtToRepayUnits = price > 0 ? debtToRepayUsd / price : 0
+
+        // Distance to liquidation
+        const usdToLiquidation = Math.max(0, collateralUsd * LIQUIDATION_THRESHOLD - debtUsd)
+        const bufferPct = collateralUsd > 0
+          ? ((LIQUIDATION_THRESHOLD - posLtv) / LIQUIDATION_THRESHOLD) * 100
+          : 0
+
+        return {
+          asset,
+          units,
+          debtUsd,
+          collateralUsd,
+          ltv: posLtv,
+          riskLevel,
+          collateralToAddUsd,
+          debtToRepayUsd,
+          debtToRepayUnits,
+          usdToLiquidation,
+          bufferPct: Math.max(0, bufferPct),
+          price,
+        }
+      })
+
+    return { monthlyGroups, currentDebt: runningDebt, currentCollateral: runningCollateral, currentLtv: ltv, positions }
   }, [events])
 
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -931,48 +980,158 @@ export default function ActivityPage() {
 
             {/* Borrower Reconciliation Tab */}
             <TabsContent value="borrower" className="space-y-6">
-              {/* Current Position Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="bg-zinc-900 border-zinc-800">
-                  <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Owed</p>
-                    <p className="text-lg font-bold font-mono text-red-400">
-                      ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-zinc-500">Crypto Borrowings</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                  <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Collateral</p>
-                    <p className="text-lg font-bold font-mono text-green-400">
-                      ${borrowerRecon.currentCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-zinc-500">Collateral Crypto</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                  <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">LTV Ratio</p>
-                    <p className={`text-lg font-bold font-mono ${borrowerRecon.currentLtv > 0.75 ? "text-red-400" : borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"}`}>
-                      {(borrowerRecon.currentLtv * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-xs text-zinc-500">Debt / Collateral</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                  <CardContent className="pt-4 pb-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Liquidation Risk</p>
-                    <p className={`text-lg font-bold ${
-                      borrowerRecon.currentLtv > 0.75 ? "text-red-400" :
-                      borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"
-                    }`}>
-                      {borrowerRecon.currentLtv > 0.75 ? "HIGH" : borrowerRecon.currentLtv > 0.5 ? "MEDIUM" : "LOW"}
-                    </p>
-                    <p className="text-xs text-zinc-500">Based on LTV</p>
-                  </CardContent>
-                </Card>
+              {/* Compact overall summary */}
+              <div className="flex flex-wrap gap-6 px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900 text-sm">
+                <div>
+                  <span className="text-zinc-500">Total Owed </span>
+                  <span className="font-mono font-bold text-red-400">
+                    ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-500">Collateral </span>
+                  <span className="font-mono font-bold text-green-400">
+                    ${borrowerRecon.currentCollateral.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-500">Blended LTV </span>
+                  <span className={`font-mono font-bold ${borrowerRecon.currentLtv > 0.75 ? "text-red-400" : borrowerRecon.currentLtv > 0.5 ? "text-amber-400" : "text-green-400"}`}>
+                    {(borrowerRecon.currentLtv * 100).toFixed(1)}%
+                  </span>
+                </div>
               </div>
+
+              {/* Per-position risk */}
+              {borrowerRecon.positions.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest px-1">Position Risk</p>
+                  {borrowerRecon.positions.map((pos) => {
+                    const ltvPct = isFinite(pos.ltv) ? pos.ltv * 100 : 100
+                    const barColor =
+                      pos.riskLevel === "critical" ? "bg-red-500" :
+                      pos.riskLevel === "at-risk"  ? "bg-amber-500" :
+                      pos.riskLevel === "monitor"  ? "bg-yellow-400" :
+                      "bg-green-500"
+                    const badgeColor =
+                      pos.riskLevel === "critical" ? "bg-red-900 text-red-300" :
+                      pos.riskLevel === "at-risk"  ? "bg-amber-900 text-amber-300" :
+                      pos.riskLevel === "monitor"  ? "bg-yellow-900 text-yellow-300" :
+                      "bg-green-900 text-green-300"
+                    const borderColor =
+                      pos.riskLevel === "critical" ? "border-red-800" :
+                      pos.riskLevel === "at-risk"  ? "border-amber-800" :
+                      pos.riskLevel === "monitor"  ? "border-yellow-800" :
+                      "border-zinc-800"
+                    const bgColor =
+                      pos.riskLevel === "critical" ? "bg-red-950/20" :
+                      pos.riskLevel === "at-risk"  ? "bg-amber-950/20" :
+                      pos.riskLevel === "monitor"  ? "bg-yellow-950/10" :
+                      "bg-zinc-900"
+                    const badgeLabel =
+                      pos.riskLevel === "critical" ? "CRITICAL" :
+                      pos.riskLevel === "at-risk"  ? "AT RISK" :
+                      pos.riskLevel === "monitor"  ? "MONITOR" :
+                      "HEALTHY"
+
+                    return (
+                      <Card key={pos.asset} className={`border ${borderColor} ${bgColor}`}>
+                        <CardContent className="pt-4 pb-4 space-y-3">
+                          {/* Header row */}
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white text-base">{pos.asset} Position</span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor}`}>
+                              {badgeLabel}
+                            </span>
+                          </div>
+
+                          {/* Collateral / Debt */}
+                          <div className="flex gap-6 text-sm">
+                            <div>
+                              <span className="text-zinc-500">Collateral </span>
+                              <span className="font-mono text-green-400">
+                                ${pos.collateralUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-zinc-500">Debt </span>
+                              <span className="font-mono text-red-400">
+                                ${pos.debtUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* LTV progress bar */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-zinc-500">LTV</span>
+                              <span className={`text-xs font-mono font-bold ${
+                                pos.riskLevel === "critical" ? "text-red-400" :
+                                pos.riskLevel === "at-risk"  ? "text-amber-400" :
+                                pos.riskLevel === "monitor"  ? "text-yellow-400" :
+                                "text-green-400"
+                              }`}>
+                                {isFinite(pos.ltv) ? `${(pos.ltv * 100).toFixed(1)}%` : "∞"}
+                              </span>
+                            </div>
+                            <div className="relative h-2 w-full rounded-full bg-zinc-700 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${barColor}`}
+                                style={{ width: `${Math.min(ltvPct, 100).toFixed(1)}%` }}
+                              />
+                              {/* Liquidation threshold marker at 80% */}
+                              <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 opacity-70" style={{ left: "80%" }} />
+                              {/* Safe target marker at 65% */}
+                              <div className="absolute top-0 bottom-0 w-0.5 bg-green-500 opacity-50" style={{ left: "65%" }} />
+                            </div>
+                            <div className="flex justify-between mt-0.5">
+                              <span className="text-[10px] text-zinc-600">0%</span>
+                              <span className="text-[10px] text-green-600" style={{ marginLeft: "56%" }}>Safe 65%</span>
+                              <span className="text-[10px] text-red-600">Liq. 80%</span>
+                            </div>
+                          </div>
+
+                          {/* Buffer & actions */}
+                          {pos.riskLevel !== "healthy" && (
+                            <div className="border-t border-zinc-700 pt-3 space-y-2">
+                              {pos.usdToLiquidation > 0 && (
+                                <p className="text-xs text-zinc-400">
+                                  <span className="text-zinc-500">Buffer to liquidation: </span>
+                                  <span className="font-mono text-zinc-200">
+                                    ${pos.usdToLiquidation.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                                  </span>
+                                  <span className="text-zinc-500"> ({pos.bufferPct.toFixed(1)}%)</span>
+                                </p>
+                              )}
+                              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
+                                To reach safe LTV (65%):
+                              </p>
+                              <div className="flex flex-col sm:flex-row gap-2 text-sm">
+                                <div className="flex-1 rounded-md border border-zinc-700 bg-zinc-800/60 px-3 py-2">
+                                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">Option A — Add Collateral</p>
+                                  <p className="font-mono text-green-400 font-semibold">
+                                    + ${pos.collateralToAddUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                                  </p>
+                                </div>
+                                <div className="flex items-center justify-center text-zinc-600 text-xs font-bold">OR</div>
+                                <div className="flex-1 rounded-md border border-zinc-700 bg-zinc-800/60 px-3 py-2">
+                                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-0.5">Option B — Repay Debt</p>
+                                  <p className="font-mono text-red-400 font-semibold">
+                                    − {pos.debtToRepayUnits.toLocaleString("en-US", { maximumFractionDigits: 4 })} {pos.asset}
+                                  </p>
+                                  <p className="text-[11px] text-zinc-500 font-mono">
+                                    (${pos.debtToRepayUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })})
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Monthly Reconciliation */}
               {borrowerRecon.monthlyGroups.length === 0 ? (
