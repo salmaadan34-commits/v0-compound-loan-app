@@ -79,31 +79,41 @@ function toCompoundEvent(tx: any): CompoundEvent | null {
 
 function generateMockCompoundEvents(address: string): CompoundEvent[] {
   const assetPrices: Record<string, number> = {
-    WETH: 3200,
-    WBTC: 65000,
-    USDC: 1,
-    USDT: 1,
-    COMP: 85,
+    WETH: 3200, WBTC: 65000, USDC: 1, USDT: 1, COMP: 85,
   }
 
-  // Deterministic pseudo-random from seed
-  const seed = parseInt(address.slice(2, 10), 16)
-  let rng = seed
+  // Deterministic PRNG seeded from address
+  const seed = parseInt(address.slice(2, 10), 16) || 1
+  let rng = seed >>> 0
   const rand = () => {
-    rng = (rng * 1664525 + 1013904223) & 0xffffffff
-    return Math.abs(rng) / 0xffffffff
+    rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0
+    return rng / 0xffffffff
   }
+
+  // ── Risk scenario: determined by address seed ─────────────────────────────
+  // 0 = HEALTHY  (~35–45% LTV)
+  // 1 = MONITOR  (~52–60% LTV)
+  // 2 = AT-RISK  (~68–75% LTV)
+  // 3 = CRITICAL (~82–90% LTV)
+  const scenario = seed % 4
+
+  // Target debt-to-collateral ratios by scenario
+  const targetLtv = [0.40, 0.56, 0.71, 0.86][scenario]
 
   const events: CompoundEvent[] = []
-  const baseDate = new Date("2021-02-19")
+  const baseDate = new Date("2021-01-15")
   let day = 0
+  let eventIdx = 0
 
-  // Running balances to prevent negative positions
+  // Running balances (prevent negatives)
   const collateralBalance: Record<string, number> = {}
   const debtBalance: Record<string, number> = {}
 
+  const advance = (minDays: number, maxDays: number) => {
+    day += minDays + Math.floor(rand() * (maxDays - minDays + 1))
+  }
+
   const makeEvent = (
-    i: number,
     accountType: AccountType,
     activity: ActivityType,
     eventName: EventName,
@@ -112,84 +122,122 @@ function generateMockCompoundEvents(address: string): CompoundEvent[] {
   ): CompoundEvent => {
     const price = assetPrices[asset]
     const amount = (amountUsd / price).toFixed(6)
-    day += Math.floor(rand() * 12) + 3          // 3–14 days between events
     const timestamp = new Date(baseDate.getTime() + day * 86400000).toISOString()
-    const blockNumber = (12000000 + day * 50 + i).toString()
-    const txHashSeed = ((seed ^ (i * 2654435761)) >>> 0).toString(16).padStart(64, "0")
+    const blockNumber = (12500000 + day * 45 + eventIdx).toString()
+    const h = ((seed ^ (eventIdx * 2654435761)) >>> 0).toString(16).padStart(64, "0")
+    eventIdx++
     return {
-      id: `0x${txHashSeed.slice(0, 64)}-${i}`,
-      blockNumber,
-      timestamp,
-      transactionHash: `0x${txHashSeed.slice(0, 64)}`,
-      accountType,
-      activity,
-      eventName,
-      asset,
-      amount,
-      amountUsd: amountUsd.toFixed(2),
+      id: `0x${h.slice(0, 64)}-${eventIdx}`,
+      blockNumber, timestamp,
+      transactionHash: `0x${h.slice(0, 64)}`,
+      accountType, activity, eventName, asset,
+      amount, amountUsd: amountUsd.toFixed(2),
     }
   }
 
-  let i = 0
+  // ── PHASE 1 (Month 1): Initial collateral deposits ────────────────────────
+  // Three collateral assets — amounts depend on scenario
+  const baseCollateral = 300000 + Math.floor(rand() * 100000)  // $300k–$400k
 
-  // ── Phase 1: deposit collateral (2–3 deposits, $50k–$200k each) ──────────
-  const collateralAssets = ["USDC", "USDT", "COMP"]
-  const numDeposits = 2 + (seed % 2)
-  for (let d = 0; d < numDeposits; d++) {
-    const asset = collateralAssets[d % collateralAssets.length]
-    const usd = 50000 + Math.floor(rand() * 150000)
-    collateralBalance[asset] = (collateralBalance[asset] || 0) + usd
-    events.push(makeEvent(i++, "collateral", "deposit", "Mint", asset, usd))
+  advance(0, 5)
+  const usdc1 = Math.floor(baseCollateral * 0.5)
+  collateralBalance.USDC = usdc1
+  events.push(makeEvent("collateral", "deposit", "Mint", "USDC", usdc1))
+
+  advance(3, 10)
+  const usdt1 = Math.floor(baseCollateral * 0.3)
+  collateralBalance.USDT = usdt1
+  events.push(makeEvent("collateral", "deposit", "Mint", "USDT", usdt1))
+
+  advance(5, 15)
+  const comp1 = Math.floor(baseCollateral * 0.2)
+  collateralBalance.COMP = comp1
+  events.push(makeEvent("collateral", "deposit", "Mint", "COMP", comp1))
+
+  const totalCollateral0 = usdc1 + usdt1 + comp1
+
+  // ── PHASE 2 (Month 2): First loan — WETH ─────────────────────────────────
+  advance(10, 20)
+  const wethDebt = Math.floor(totalCollateral0 * targetLtv * 0.55)
+  debtBalance.WETH = wethDebt
+  events.push(makeEvent("debt", "borrowing", "Borrow", "WETH", wethDebt))
+
+  // ── PHASE 3 (Month 2–3): Second loan — WBTC ──────────────────────────────
+  advance(15, 30)
+  const wbtcDebt = Math.floor(totalCollateral0 * targetLtv * 0.45)
+  debtBalance.WBTC = wbtcDebt
+  events.push(makeEvent("debt", "borrowing", "Borrow", "WBTC", wbtcDebt))
+
+  // ── PHASE 4 (Month 3): Top up collateral (healthy/monitor scenarios only) ─
+  if (scenario <= 1) {
+    advance(20, 35)
+    const topUp = Math.floor(30000 + rand() * 50000)
+    collateralBalance.USDC += topUp
+    events.push(makeEvent("collateral", "deposit", "Mint", "USDC", topUp))
   }
 
-  // ── Phase 2: borrow (1–2 loans, at most 60% of collateral value each) ────
-  const totalCollateral = Object.values(collateralBalance).reduce((s, v) => s + v, 0)
-  const debtAssets = ["WETH", "WBTC"]
-  const numBorrows = 1 + (seed % 2)
-  for (let b = 0; b < numBorrows; b++) {
-    const asset = debtAssets[b % debtAssets.length]
-    const maxBorrow = totalCollateral * 0.55 / numBorrows
-    const usd = Math.floor(rand() * maxBorrow * 0.6) + maxBorrow * 0.3
-    debtBalance[asset] = (debtBalance[asset] || 0) + usd
-    events.push(makeEvent(i++, "debt", "borrowing", "Borrow", asset, usd))
+  // ── PHASE 5 (Month 4): Partial WETH repayment ────────────────────────────
+  advance(20, 40)
+  const wethRepay = Math.floor(debtBalance.WETH * (0.15 + rand() * 0.20))
+  debtBalance.WETH -= wethRepay
+  events.push(makeEvent("debt", "repayment", "RepayBorrow", "WETH", wethRepay))
+
+  // ── PHASE 6 (Month 4–5): Additional USDT collateral deposit ─────────────
+  advance(15, 25)
+  const usdt2 = Math.floor(20000 + rand() * 40000)
+  collateralBalance.USDT += usdt2
+  events.push(makeEvent("collateral", "deposit", "Mint", "USDT", usdt2))
+
+  // ── PHASE 7 (Month 5): Top-up WETH borrow ────────────────────────────────
+  advance(20, 35)
+  const wethTopUp = Math.floor(wethDebt * (0.10 + rand() * 0.15))
+  debtBalance.WETH += wethTopUp
+  events.push(makeEvent("debt", "borrowing", "Borrow", "WETH", wethTopUp))
+
+  // ── PHASE 8 (Month 6): Collateral withdrawal ─────────────────────────────
+  // At-risk and critical scenarios withdraw more collateral → raises LTV
+  const withdrawPct = scenario === 3 ? 0.30 + rand() * 0.15
+    : scenario === 2 ? 0.15 + rand() * 0.10
+    : 0.05 + rand() * 0.08
+
+  advance(25, 40)
+  const usdcWithdraw = Math.floor(collateralBalance.USDC * withdrawPct)
+  if (usdcWithdraw > 0) {
+    collateralBalance.USDC -= usdcWithdraw
+    events.push(makeEvent("collateral", "redemption", "Redeem", "USDC", usdcWithdraw))
   }
 
-  // ── Phase 3: add more collateral (optional, 50% chance) ──────────────────
-  if (rand() > 0.5) {
-    const asset = collateralAssets[Math.floor(rand() * collateralAssets.length)]
-    const usd = 20000 + Math.floor(rand() * 60000)
-    collateralBalance[asset] = (collateralBalance[asset] || 0) + usd
-    events.push(makeEvent(i++, "collateral", "deposit", "Mint", asset, usd))
+  // ── PHASE 9 (Month 7): Partial WBTC repayment (healthy only) ─────────────
+  if (scenario === 0) {
+    advance(20, 35)
+    const wbtcRepay = Math.floor(debtBalance.WBTC * (0.20 + rand() * 0.20))
+    debtBalance.WBTC -= wbtcRepay
+    events.push(makeEvent("debt", "repayment", "RepayBorrow", "WBTC", wbtcRepay))
   }
 
-  // ── Phase 4: partial repayments (never exceed outstanding debt) ───────────
-  for (const [asset, balance] of Object.entries(debtBalance)) {
-    if (balance > 0 && rand() > 0.4) {
-      const usd = Math.floor(balance * (0.1 + rand() * 0.3))   // repay 10–40%
-      debtBalance[asset] -= usd
-      events.push(makeEvent(i++, "debt", "repayment", "RepayBorrow", asset, usd))
-    }
+  // ── PHASE 10 (Month 7–8): Additional COMP deposit (monitor scenario) ──────
+  if (scenario === 1) {
+    advance(15, 30)
+    const compTop = Math.floor(15000 + rand() * 25000)
+    collateralBalance.COMP += compTop
+    events.push(makeEvent("collateral", "deposit", "Mint", "COMP", compTop))
   }
 
-  // ── Phase 5: partial collateral withdrawal (never exceed balance) ─────────
-  for (const [asset, balance] of Object.entries(collateralBalance)) {
-    if (balance > 0 && rand() > 0.6) {
-      const usd = Math.floor(balance * (0.05 + rand() * 0.2))  // withdraw 5–25%
-      collateralBalance[asset] -= usd
-      events.push(makeEvent(i++, "collateral", "redemption", "Redeem", asset, usd))
-    }
+  // ── PHASE 11 (Month 8): Critical scenario — borrow even more ─────────────
+  if (scenario === 3) {
+    advance(20, 35)
+    const extraWeth = Math.floor(debtBalance.WETH * (0.20 + rand() * 0.15))
+    debtBalance.WETH += extraWeth
+    events.push(makeEvent("debt", "borrowing", "Borrow", "WETH", extraWeth))
   }
 
-  // ── Phase 6: second borrow top-up (optional) ─────────────────────────────
-  if (rand() > 0.6) {
-    const asset = debtAssets[Math.floor(rand() * debtAssets.length)]
-    const remainingDebt = Object.values(debtBalance).reduce((s, v) => s + v, 0)
-    const remainingCollateral = Object.values(collateralBalance).reduce((s, v) => s + v, 0)
-    const headroom = remainingCollateral * 0.75 - remainingDebt
-    if (headroom > 5000) {
-      const usd = Math.floor(headroom * 0.3)
-      debtBalance[asset] = (debtBalance[asset] || 0) + usd
-      events.push(makeEvent(i++, "debt", "borrowing", "Borrow", asset, usd))
+  // ── PHASE 12 (Month 9): Final USDT collateral withdrawal ─────────────────
+  if (scenario >= 2) {
+    advance(25, 45)
+    const udtWithdraw = Math.floor(collateralBalance.USDT * (0.10 + rand() * 0.15))
+    if (udtWithdraw > 0) {
+      collateralBalance.USDT -= udtWithdraw
+      events.push(makeEvent("collateral", "redemption", "Redeem", "USDT", udtWithdraw))
     }
   }
 
