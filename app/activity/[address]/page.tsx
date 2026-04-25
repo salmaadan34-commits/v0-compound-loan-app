@@ -116,6 +116,10 @@ export default function ActivityPage() {
     const collTokens = new Set<string>()
     const dbtTokens = new Set<string>()
 
+    type RiskLevel = "healthy" | "monitor" | "at-risk" | "critical"
+    const ltvToRisk = (ltv: number): RiskLevel =>
+      ltv >= 0.80 ? "critical" : ltv >= 0.65 ? "at-risk" : ltv >= 0.50 ? "monitor" : "healthy"
+
     // Ledger entries by token
     type LedgerEntry = {
       token: string
@@ -128,6 +132,7 @@ export default function ActivityPage() {
       liquidated: number
       payments: number
       end: number
+      riskAtTime: RiskLevel
     }
     type CollateralLedgerEntry = {
       token: string
@@ -140,17 +145,21 @@ export default function ActivityPage() {
       liquidated: number
       reclaimed: number
       end: number
+      riskAtTime: RiskLevel
     }
 
     const loanEntries: LedgerEntry[] = []
     const collateralEntries: CollateralLedgerEntry[] = []
-    
-    // Running balances by token
+
+    // Running balances — token units
     const loanBalances: Record<string, number> = {}
     const collateralBalances: Record<string, number> = {}
+    // Running USD totals for live LTV calculation
+    let runningDebtUsd = 0
+    let runningCollateralUsd = 0
 
     // Sort events by timestamp for running balance calculation
-    const sortedEvents = [...events].sort((a, b) => 
+    const sortedEvents = [...events].sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     )
 
@@ -158,29 +167,34 @@ export default function ActivityPage() {
       const amt = parseFloat(e.amount)
       const amtUsd = parseFloat(e.amountUsd)
       const date = new Date(e.timestamp).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
-      
+
       if (e.accountType === "collateral") {
         collTokens.add(e.asset)
         const start = collateralBalances[e.asset] || 0
         let provided = 0, accruals = 0, liquidated = 0, reclaimed = 0
-        
+
         if (e.activity === "deposit") {
           collateral.deposited[e.asset] = (collateral.deposited[e.asset] || 0) + amtUsd
           provided = amt
+          runningCollateralUsd += amtUsd
         } else if (e.activity === "redemption") {
           collateral.redeemed[e.asset] = (collateral.redeemed[e.asset] || 0) + amtUsd
           reclaimed = amt
+          runningCollateralUsd -= amtUsd
         } else if (e.activity === "liquidation") {
           collateral.seized[e.asset] = (collateral.seized[e.asset] || 0) + amtUsd
           liquidated = amt
+          runningCollateralUsd -= amtUsd
         } else if (e.activity === "interest") {
           collateral["interest income"][e.asset] = (collateral["interest income"][e.asset] || 0) + amtUsd
           accruals = amt
+          runningCollateralUsd += amtUsd
         }
-        
+
         const end = start + provided + accruals - liquidated - reclaimed
         collateralBalances[e.asset] = end
-        
+        const ltv = runningCollateralUsd > 0 ? runningDebtUsd / runningCollateralUsd : 0
+
         collateralEntries.push({
           token: e.asset,
           item: getItemLabel(e.activity, e.accountType),
@@ -192,28 +206,34 @@ export default function ActivityPage() {
           liquidated,
           reclaimed,
           end,
+          riskAtTime: ltvToRisk(ltv),
         })
       } else {
         dbtTokens.add(e.asset)
         const start = loanBalances[e.asset] || 0
         let proceeds = 0, accruals = 0, liquidated = 0, payments = 0
-        
+
         if (e.activity === "borrowing") {
           debt.Borrow[e.asset] = (debt.Borrow[e.asset] || 0) + amtUsd
           proceeds = amt
+          runningDebtUsd += amtUsd
         } else if (e.activity === "repayment") {
           debt.RepayBorrow[e.asset] = (debt.RepayBorrow[e.asset] || 0) + amtUsd
           payments = amt
+          runningDebtUsd -= amtUsd
         } else if (e.activity === "liquidation") {
           liquidated = amt
+          runningDebtUsd -= amtUsd
         } else if (e.activity === "interest") {
           debt["interest expense"][e.asset] = (debt["interest expense"][e.asset] || 0) + amtUsd
           accruals = amt
+          runningDebtUsd += amtUsd
         }
-        
+
         const end = start + proceeds + accruals - liquidated - payments
         loanBalances[e.asset] = end
-        
+        const ltv = runningCollateralUsd > 0 ? runningDebtUsd / runningCollateralUsd : 0
+
         loanEntries.push({
           token: e.asset,
           item: getItemLabel(e.activity, e.accountType),
@@ -225,6 +245,7 @@ export default function ActivityPage() {
           liquidated,
           payments,
           end,
+          riskAtTime: ltvToRisk(ltv),
         })
       }
     })
@@ -239,13 +260,16 @@ export default function ActivityPage() {
     }
   }, [events])
 
+  type RiskLevel = "healthy" | "monitor" | "at-risk" | "critical"
   type LedgerEntry = {
     token: string; item: string; date: string; timestamp: string
     start: number; proceeds: number; accruals: number; liquidated: number; payments: number; end: number
+    riskAtTime: RiskLevel
   }
   type CollateralLedgerEntry = {
     token: string; item: string; date: string; timestamp: string
     start: number; provided: number; accruals: number; liquidated: number; reclaimed: number; end: number
+    riskAtTime: RiskLevel
   }
   type PeriodGroup<T> = { periodLabel: string; rows: T[]; subtotals: Record<string, number> }
 
@@ -882,12 +906,10 @@ export default function ActivityPage() {
                                   <TableCell>
                                     {(() => {
                                       if (entry.item === "Paid by borrower") return <span className="text-[10px] text-green-500 font-semibold">PAID</span>
-                                      const pos = borrowerRecon.positions.find(p => p.asset === entry.token)
-                                      if (!pos) return <span className="text-zinc-600 text-xs">—</span>
                                       const badge =
-                                        pos.riskLevel === "critical" ? { label: "CRITICAL", cls: "bg-red-900 text-red-300" } :
-                                        pos.riskLevel === "at-risk"  ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
-                                        pos.riskLevel === "monitor"  ? { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" } :
+                                        entry.riskAtTime === "critical" ? { label: "CRITICAL", cls: "bg-red-900 text-red-300" } :
+                                        entry.riskAtTime === "at-risk"  ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
+                                        entry.riskAtTime === "monitor"  ? { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" } :
                                         { label: "LOW", cls: "bg-green-900 text-green-300" }
                                       return (
                                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
@@ -1042,12 +1064,13 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell>
                                     {(() => {
-                                      const ltv = borrowerRecon.currentLtv
-                                      if (ltv < 0.50) return <span className="text-[10px] text-green-400 font-semibold">SAFE</span>
+                                      if (entry.item === "Reclaimed") return <span className="text-[10px] text-green-500 font-semibold">WITHDRAWN</span>
+                                      const r = entry.riskAtTime
+                                      if (r === "healthy") return <span className="text-[10px] text-green-400 font-semibold">SAFE</span>
                                       const badge =
-                                        ltv >= 0.80 ? { label: "SEIZABLE", cls: "bg-red-900 text-red-300" } :
-                                        ltv >= 0.65 ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
-                                                      { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" }
+                                        r === "critical" ? { label: "SEIZABLE", cls: "bg-red-900 text-red-300" } :
+                                        r === "at-risk"  ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
+                                                           { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" }
                                       return (
                                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
                                           {badge.label}
