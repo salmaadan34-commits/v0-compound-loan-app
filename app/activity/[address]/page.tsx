@@ -724,42 +724,62 @@ export default function ActivityPage() {
 
             {/* Loan Ledger Tab */}
             <TabsContent value="loan">
-              {/* LTV & Liquidation Risk — based on borrowerRecon running totals */}
-              {borrowerRecon.currentDebt > 0 && (
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Total Debt</p>
-                    <p className="font-mono font-bold text-red-400 text-lg">
-                      ${borrowerRecon.currentDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-[11px] text-zinc-600 mt-0.5">Debt / Crypto Borrowings</p>
-                  </div>
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">LTV Ratio</p>
-                    <p className={`font-mono font-bold text-lg ${
-                      borrowerRecon.currentLtv >= 0.80 ? "text-red-400" :
-                      borrowerRecon.currentLtv >= 0.65 ? "text-amber-400" :
-                      borrowerRecon.currentLtv >= 0.50 ? "text-yellow-400" :
+              {/* Per-loan: Total Debt · LTV Ratio · Liquidation Risk */}
+              {borrowerRecon.positions.length > 0 && (
+                <div className="space-y-3 mb-6">
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest px-1">Loan Risk — Per Position</p>
+                  {borrowerRecon.positions.map((pos) => {
+                    const ltvColor =
+                      pos.riskLevel === "critical" ? "text-red-400" :
+                      pos.riskLevel === "at-risk"  ? "text-amber-400" :
+                      pos.riskLevel === "monitor"  ? "text-yellow-400" :
                       "text-green-400"
-                    }`}>
-                      {(borrowerRecon.currentLtv * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-[11px] text-zinc-600 mt-0.5">Debt / Collateral</p>
-                  </div>
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Liquidation Risk</p>
-                    {(() => {
-                      const ltv = borrowerRecon.currentLtv
-                      const label = ltv >= 0.80 ? "CRITICAL" : ltv >= 0.65 ? "AT RISK" : ltv >= 0.50 ? "MONITOR" : "LOW"
-                      const color = ltv >= 0.80 ? "text-red-400" : ltv >= 0.65 ? "text-amber-400" : ltv >= 0.50 ? "text-yellow-400" : "text-green-400"
-                      return (
-                        <>
-                          <p className={`font-bold text-lg ${color}`}>{label}</p>
-                          <p className="text-[11px] text-zinc-600 mt-0.5">Based on LTV · Liq. threshold 80%</p>
-                        </>
-                      )
-                    })()}
-                  </div>
+                    const badgeColor =
+                      pos.riskLevel === "critical" ? "bg-red-900 text-red-300" :
+                      pos.riskLevel === "at-risk"  ? "bg-amber-900 text-amber-300" :
+                      pos.riskLevel === "monitor"  ? "bg-yellow-900 text-yellow-300" :
+                      "bg-green-900 text-green-300"
+                    const borderColor =
+                      pos.riskLevel === "critical" ? "border-red-800" :
+                      pos.riskLevel === "at-risk"  ? "border-amber-800" :
+                      pos.riskLevel === "monitor"  ? "border-yellow-800" :
+                      "border-zinc-800"
+                    const badgeLabel =
+                      pos.riskLevel === "critical" ? "CRITICAL" :
+                      pos.riskLevel === "at-risk"  ? "AT RISK" :
+                      pos.riskLevel === "monitor"  ? "MONITOR" : "LOW"
+
+                    return (
+                      <div key={pos.asset} className={`grid grid-cols-3 gap-0 rounded-xl border ${borderColor} bg-zinc-900 overflow-hidden`}>
+                        {/* Total Debt */}
+                        <div className="px-4 py-3 border-r border-zinc-800">
+                          <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">{pos.asset} — Total Debt</p>
+                          <p className="font-mono font-bold text-red-400 text-lg">
+                            ${pos.debtUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-[11px] text-zinc-600 mt-0.5">
+                            {pos.units.toLocaleString("en-US", { maximumFractionDigits: 4 })} {pos.asset} · ${pos.price.toLocaleString("en-US", { maximumFractionDigits: 0 })} /unit
+                          </p>
+                        </div>
+                        {/* LTV Ratio */}
+                        <div className="px-4 py-3 border-r border-zinc-800">
+                          <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">LTV Ratio</p>
+                          <p className={`font-mono font-bold text-lg ${ltvColor}`}>
+                            {isFinite(pos.ltv) ? `${(pos.ltv * 100).toFixed(1)}%` : "∞"}
+                          </p>
+                          <p className="text-[11px] text-zinc-600 mt-0.5">Debt / Collateral · Liq. at 80%</p>
+                        </div>
+                        {/* Liquidation Risk */}
+                        <div className="px-4 py-3">
+                          <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Liquidation Risk</p>
+                          <span className={`inline-block text-sm font-bold px-2 py-0.5 rounded-full ${badgeColor}`}>
+                            {badgeLabel}
+                          </span>
+                          <p className="text-[11px] text-zinc-600 mt-1.5">Based on LTV</p>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               <Card className="bg-zinc-900 border-zinc-800">
