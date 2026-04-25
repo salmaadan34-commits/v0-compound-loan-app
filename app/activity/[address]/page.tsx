@@ -341,7 +341,7 @@ export default function ActivityPage() {
     )
 
     if (sortedEvents.length === 0) {
-      return { monthlyGroups: [], currentDebt: 0, currentCollateral: 0, currentLtv: 0 }
+      return { monthlyGroups: [], currentDebt: 0, currentCollateral: 0, currentLtv: 0, positions: [] }
     }
 
     // Build month range
