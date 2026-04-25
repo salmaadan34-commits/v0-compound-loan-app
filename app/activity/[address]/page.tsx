@@ -849,6 +849,7 @@ export default function ActivityPage() {
                             <TableHead className="text-right font-bold text-zinc-300">Proceeds</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Accruals</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Liquidated</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Risk Level</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Payments</TableHead>
                             <TableHead className="text-right font-bold italic text-zinc-300">End</TableHead>
                           </TableRow>
@@ -857,7 +858,7 @@ export default function ActivityPage() {
                           {groupedLoanLedger.map((group) => (
                             <Fragment key={group.periodLabel}>
                               <TableRow className="bg-zinc-800 border-zinc-700">
-                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4 text-zinc-300">
+                                <TableCell colSpan={10} className="font-semibold text-sm py-1 px-4 text-zinc-300">
                                   {group.periodLabel}
                                 </TableCell>
                               </TableRow>
@@ -877,6 +878,22 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.liquidated)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {(() => {
+                                      const pos = borrowerRecon.positions.find(p => p.asset === entry.token)
+                                      if (!pos) return <span className="text-zinc-600 text-xs">—</span>
+                                      const badge =
+                                        pos.riskLevel === "critical" ? { label: "CRITICAL", cls: "bg-red-900 text-red-300" } :
+                                        pos.riskLevel === "at-risk"  ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
+                                        pos.riskLevel === "monitor"  ? { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" } :
+                                        { label: "LOW", cls: "bg-green-900 text-green-300" }
+                                      return (
+                                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
+                                          {badge.label}
+                                        </span>
+                                      )
+                                    })()}
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.payments)}
@@ -898,6 +915,7 @@ export default function ActivityPage() {
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.liquidated)}
                                 </TableCell>
+                                <TableCell />
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.payments)}
                                 </TableCell>
