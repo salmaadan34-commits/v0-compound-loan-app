@@ -902,6 +902,11 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.liquidated)}
+                                    {entry.liquidated > 0 && entry.start > 0 && (
+                                      <span className="block text-[10px] text-zinc-500">
+                                        {((entry.liquidated / entry.start) * 100).toFixed(1)}% of position
+                                      </span>
+                                    )}
                                   </TableCell>
                                   <TableCell>
                                     {(() => {
