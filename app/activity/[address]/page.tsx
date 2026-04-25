@@ -933,6 +933,53 @@ export default function ActivityPage() {
 
             {/* Collateral Ledger Tab */}
             <TabsContent value="collateral">
+              {/* Collateral seizure risk banner */}
+              {borrowerRecon.currentDebt > 0 && (() => {
+                const ltv = borrowerRecon.currentLtv
+                const totalCollateral = borrowerRecon.currentCollateral
+                // How much collateral would be seized to cover debt at liquidation
+                const atRiskUsd = Math.max(0, borrowerRecon.currentDebt)
+                const bufferUsd = Math.max(0, totalCollateral * 0.80 - borrowerRecon.currentDebt)
+                const pctAtRisk = totalCollateral > 0 ? (atRiskUsd / totalCollateral) * 100 : 0
+
+                if (ltv < 0.50) return null   // healthy — no banner needed
+
+                const cfg =
+                  ltv >= 0.80 ? { border: "border-red-800",    bg: "bg-red-950/30",    icon: "🔴", title: "CRITICAL — Collateral Seizure Imminent",        body: "LTV has breached 80%. Liquidators can seize your collateral now." } :
+                  ltv >= 0.65 ? { border: "border-amber-800",  bg: "bg-amber-950/20",  icon: "🟠", title: "AT RISK — Collateral May Be Seized",              body: `Only $${bufferUsd.toLocaleString("en-US",{maximumFractionDigits:0})} separates you from the 80% liquidation threshold.` } :
+                               { border: "border-yellow-800", bg: "bg-yellow-950/10", icon: "🟡", title: "MONITOR — Collateral Under Pressure",             body: `LTV is ${(ltv*100).toFixed(1)}%. A further price move or withdrawal could push you into the at-risk zone.` }
+
+                return (
+                  <div className={`mb-4 rounded-xl border ${cfg.border} ${cfg.bg} px-5 py-4 space-y-3`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{cfg.icon}</span>
+                      <p className="font-bold text-white text-sm">{cfg.title}</p>
+                    </div>
+                    <p className="text-xs text-zinc-400">{cfg.body}</p>
+                    <div className="grid grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Current LTV</p>
+                        <p className={`font-mono font-bold text-sm ${ltv >= 0.80 ? "text-red-400" : ltv >= 0.65 ? "text-amber-400" : "text-yellow-400"}`}>
+                          {(ltv * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Collateral at Risk</p>
+                        <p className="font-mono font-bold text-sm text-red-400">
+                          ${atRiskUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                          <span className="text-zinc-500 font-normal text-[10px] ml-1">({pctAtRisk.toFixed(0)}% of total)</span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Buffer to Liquidation</p>
+                        <p className={`font-mono font-bold text-sm ${bufferUsd <= 0 ? "text-red-400" : "text-zinc-200"}`}>
+                          {bufferUsd <= 0 ? "LIQUIDATABLE NOW" : `$${bufferUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader className="pb-2 flex flex-row items-center justify-between border-b border-zinc-800">
                   <CardTitle className="text-lg text-white">COLLATERAL</CardTitle>
@@ -962,6 +1009,7 @@ export default function ActivityPage() {
                             <TableHead className="text-right font-bold text-zinc-300">Provided</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Accruals</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Liquidated</TableHead>
+                            <TableHead className="font-bold text-zinc-300">Seizure Risk</TableHead>
                             <TableHead className="text-right font-bold text-zinc-300">Reclaimed</TableHead>
                             <TableHead className="text-right font-bold italic text-zinc-300">End</TableHead>
                           </TableRow>
@@ -970,7 +1018,7 @@ export default function ActivityPage() {
                           {groupedCollateralLedger.map((group) => (
                             <Fragment key={group.periodLabel}>
                               <TableRow className="bg-zinc-800 border-zinc-700">
-                                <TableCell colSpan={9} className="font-semibold text-sm py-1 px-4 text-zinc-300">
+                                <TableCell colSpan={10} className="font-semibold text-sm py-1 px-4 text-zinc-300">
                                   {group.periodLabel}
                                 </TableCell>
                               </TableRow>
@@ -990,6 +1038,21 @@ export default function ActivityPage() {
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-red-400">
                                     {formatLedgerValue(entry.liquidated, true)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {(() => {
+                                      const ltv = borrowerRecon.currentLtv
+                                      if (ltv < 0.50) return <span className="text-[10px] text-green-400 font-semibold">SAFE</span>
+                                      const badge =
+                                        ltv >= 0.80 ? { label: "SEIZABLE", cls: "bg-red-900 text-red-300" } :
+                                        ltv >= 0.65 ? { label: "AT RISK",  cls: "bg-amber-900 text-amber-300" } :
+                                                      { label: "MONITOR",  cls: "bg-yellow-900 text-yellow-300" }
+                                      return (
+                                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
+                                          {badge.label}
+                                        </span>
+                                      )
+                                    })()}
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-green-400">
                                     {formatLedgerValue(entry.reclaimed, true)}
@@ -1011,6 +1074,7 @@ export default function ActivityPage() {
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.liquidated, true)}
                                 </TableCell>
+                                <TableCell />
                                 <TableCell className="text-right font-mono">
                                   {formatLedgerValue(group.subtotals.reclaimed, true)}
                                 </TableCell>
